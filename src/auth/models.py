@@ -91,7 +91,7 @@ class UserCreate(BookTankBase):
 
 class UserRead(UserBase):
     id: PrimaryKey
+    username: str
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
-    username: str
 

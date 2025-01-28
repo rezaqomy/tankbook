@@ -3,7 +3,7 @@ from pydantic import ValidationError, error_wrappers
 
 
 from src.database.core import DbSession
-from .service import create
+from .service import create_user as service_create_user
 from .models import User, UserRead, UserCreate
 
 
@@ -14,10 +14,6 @@ user_router = APIRouter(prefix="/user")
 
 
 @user_router.post("/users/", response_model=UserRead)
-async def create_user(user: UserCreate, db: DbSession):
-    db_user = User(**user.dict(exclude={"password"}))
-    db_user.set_password(user.password)
-    db.add(db_user)
-    await db.commit()
-    await db.refresh(db_user)
-    return db_user
+async def create_user_view(user: UserCreate, db: DbSession):
+    new_user = await service_create_user(user=user, db_session=db)
+    return new_user
