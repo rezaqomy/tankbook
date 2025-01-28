@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, UTC
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND
 
 from src.database.core import DbSession, get_db
-from .models import (UserCreate, User, TokenData)
+from .models import (UserCreate, User)
 from src.config import settings
 
 
@@ -90,9 +90,7 @@ async def get_current_user(request: Request, db_session: AsyncSession = Depends(
         )
 
     token = token.replace("Bearer ", "")
-    print(token)
     payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-    print(payload)
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
         username = payload.get("username")
