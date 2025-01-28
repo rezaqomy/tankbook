@@ -1,11 +1,15 @@
 from datetime import datetime
 
 from pydantic import BaseModel
-from pydantic.types import SecretStr
+from pydantic.types import SecretStr, conint
 
 from sqlalchemy import Column, DateTime, Integer, event
+from src.database.core import Base
+# pydantic type that limits the range of primary keys
+PrimaryKey = conint(gt=0, lt=2147483647)
 
 
+#sqlalchemy models ...
 class PrimaryKeyMixin(object):
     """Primary key mixin"""
 
@@ -29,7 +33,7 @@ class TimeStampMixin(object):
     def __declare_last__(cls):
         event.listen(cls, "before_update", cls._updated_at)
 
-
+#pydantic models ... 
 class BookTankBase(BaseModel):
     class config:
         orm_mode = True
@@ -42,3 +46,8 @@ class BookTankBase(BaseModel):
             datetime: lambda v: v.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if v else None,
             SecretStr: lambda v: v.get_secret_value() if v else None,
         }
+
+
+
+from src.auth.models import *
+
