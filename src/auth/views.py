@@ -18,12 +18,11 @@ from .models import (
         UserCreate,
         UserLogin,
         UserLoginResponse,
-        BearerToken,
 )
 
 
-auth_router = APIRouter(prefix="/auth")
-user_router = APIRouter(prefix="/user")
+auth_router = APIRouter(prefix="/auth", tags=['auth'])
+user_router = APIRouter(prefix="/user", tags=['user'])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
