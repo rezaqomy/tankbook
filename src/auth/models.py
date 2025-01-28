@@ -1,4 +1,5 @@
 from typing import Optional
+from fastapi.openapi.models import APIKey, APIKeyIn, SecuritySchemeType
 from pydantic import EmailStr, ValidationError, validator, Field
 from sqlalchemy import Column, ForeignKey, Integer, String, LargeBinary, Boolean, DateTime
 
@@ -121,14 +122,4 @@ class UserRegister(UserLogin):
             raise ValueError("Must not be empty string")
         password = v 
         return User.hash_password(password)
-
-class Token(BookTankBase):
-    acsses_token: str
-    token_type: str
-
-class TokenData(BookTankBase):
-    id: int
-    username: str
-    first_name: str
-    last_name: str
 
