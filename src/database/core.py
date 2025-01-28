@@ -28,11 +28,6 @@ class CustomBase:
     __repr_attrs__ = []
     __repr_max_length__ = 15
     
-    
-    id = Column(Integer, nullable=False, autoincrement=True, primary_key=True)
-    created_at = Column(
-        "created_at", DateTime(), default=current_timestamp(), nullable=False
-    )
 
     @declared_attr
     def __tablename__(self):
