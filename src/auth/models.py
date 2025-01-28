@@ -36,10 +36,7 @@ class User(Base, TimeStampMixin, PrimaryKeyMixin):
         """Verify if provided password matches stored hash"""
         if not password or not self.password:
             return False
-        print(self.password)
-        print(self.hash_password(password))
         result = bcrypt.checkpw(password.encode("utf-8"), self.password)
-        print(result)
         return result
 
     def set_password(self, password: str) -> None:
