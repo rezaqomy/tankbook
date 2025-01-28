@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import EmailStr, validator, Field
+from pydantic import EmailStr, ValidationError, validator, Field
 from sqlalchemy import Column, ForeignKey, Integer, String, LargeBinary, Boolean, DateTime
 
 
@@ -10,19 +10,14 @@ from src.config import settings
 
 from jose import jwt
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import bcrypt
 
 
-DISPATCH_JWT_EXP = settings.DISPATCH_JWT_EXP
-DISPATCH_JWT_ALG = settings.DISPATCH_JWT_ALG
-DISPATCH_JWT_SECRET = settings.DISPATCH_JWT_SECRET
+JWT_EXP = settings.JWT_EXP
+JWT_ALG = settings.JWT_ALG
+JWT_SECRET = settings.JWT_SECRET
 
-def hash_password(password: str):
-    """Generates a hashed version of the provided password."""
-    pw = bytes(password, "utf-8")
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(pw, salt)
 
 
 class User(Base, TimeStampMixin, PrimaryKeyMixin):
@@ -40,18 +35,30 @@ class User(Base, TimeStampMixin, PrimaryKeyMixin):
         """Verify if provided password matches stored hash"""
         if not password or not self.password:
             return False
-        return bcrypt.checkpw(password.encode("utf-8"), self.password)
+        print(self.password)
+        print(self.hash_password(password))
+        result = bcrypt.checkpw(password.encode("utf-8"), self.password)
+        print(result)
+        return result
 
     def set_password(self, password: str) -> None:
         """Set a new password"""
         if not password:
             raise ValueError("Password cannot be empty")
-        self.password = hash_password(password)
+        self.password = self.hash_password(password)
+
+    @staticmethod
+    def hash_password(password: str):
+        """Generates a hashed version of the provided password."""
+        pw = bytes(password, "utf-8")
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(pw, salt)
+
 
     @property
     def token(self):
-        now = datetime.utcnow()
-        exp = (now + timedelta(seconds=DISPATCH_JWT_EXP)).timestamp()
+        now = datetime.now(UTC)
+        exp = (now + timedelta(seconds=JWT_EXP)).timestamp()
         data = {
             "exp": exp,
             "id": self.id,
@@ -62,7 +69,7 @@ class User(Base, TimeStampMixin, PrimaryKeyMixin):
             "email": self.email,
             "role": self.role,
         }
-        return jwt.encode(data, DISPATCH_JWT_SECRET, algorithm=DISPATCH_JWT_ALG)
+        return jwt.encode(data, JWT_SECRET, algorithm=JWT_ALG)
 
 
 
@@ -84,14 +91,44 @@ class UserCreate(BookTankBase):
     email: EmailStr = Field(None, nullable=True)
     password: Optional[str] = Field(None, nullable=True)
 
-    @validator("password", pre=True)
-    def hash(cls, v):
-        return hash_password(str(v))
-
-
 class UserRead(UserBase):
     id: PrimaryKey
     username: str
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
+
+class UserLogin(UserBase):
+    password: str
+
+    @validator("password")
+    def password_required(cls, v):
+        if not v:
+            raise ValueError("Must not be empty string")
+        return v
+
+
+class UserLoginResponse(BookTankBase):
+    token: Optional[str] = Field(None, nullable=True)
+
+
+class UserRegister(UserLogin):
+    password: Optional[str] = Field(None, nullable=True)
+
+    @validator("password", pre=True, always=True)
+    def password_required(cls, v):
+        # we generate a password for those that don't have one
+        if not v:
+            raise ValueError("Must not be empty string")
+        password = v 
+        return User.hash_password(password)
+
+class Token(BookTankBase):
+    acsses_token: str
+    token_type: str
+
+class TokenData(BookTankBase):
+    id: int
+    username: str
+    first_name: str
+    last_name: str
 
