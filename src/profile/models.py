@@ -19,10 +19,25 @@ class CustomerRegister(BookTankBase):
     user: UserCreate
     
 
+class CustomerGet(BookTankBase):
+    user: int
+    subscription_model: SubscriptionModel
+    subscription_end: Optional[datetime]
+    wallet_money: int
+
 class CustomerRead(BookTankBase):
     user_id: int
     subscription_model: SubscriptionModel
     subscription_end: Optional[datetime] 
     wallet_money: int 
 
+class CustomerUpdateResponse(BookTankBase):
+    subscription_model: SubscriptionModel
+    subscription_end: Optional[datetime]
+    wallet_money: int
+
+class CustomerUpdate(BookTankBase):
+    subscription_model: Optional[SubscriptionModel] = None
+    subscription_end: Optional[datetime] = None
+    wallet_money: Optional[int] = None
 
