@@ -5,7 +5,10 @@ from sqlalchemy import Column, ForeignKey, Integer, String, LargeBinary, Boolean
 
 
 from src.database.core import Base
-from src.models import TimeStampMixin, PrimaryKeyMixin, BookTankBase, PrimaryKey
+from src.base import TimeStampMixin, PrimaryKeyMixin 
+from src.schemas import BookTankBase, PrimaryKey
+
+
 from src.enums import UserRoles
 from src.config import settings
 
