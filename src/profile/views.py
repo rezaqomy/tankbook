@@ -2,10 +2,8 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.sql import select
 
-from src.auth.models import UserRead
-from src.auth.service import get_by_id
 from src.database.core import DbSession
-from .models import CustomerGet, CustomerRead, CustomerRegister, CustomerUpdate, Customer, CustomerUpdateResponse
+from .models import CustomerGet, CustomerRead, CustomerUpdate, Customer, CustomerUpdateResponse
 from .service import CustomerService
 
 

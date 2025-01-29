@@ -5,6 +5,7 @@ from src.schemas import BookTankBase
 from src.enums import SubscriptionModel
 from src.auth.models import UserCreate, UserRead
 from src.database.core import Base
+from src.base import PrimaryKeyMixin
 
 
 
@@ -14,6 +15,15 @@ class Customer(Base):
     subscription_end = Column(DateTime, nullable = True)
     wallet_money = Column(Integer, default=0, nullable=False)
 
+class City(Base, PrimaryKeyMixin):
+    name = Column(String, nullable=False)
+
+class Author(Base):
+    user_id = Column(Integer, ForeignKey('user.id'), primary_key=True, nullable=False)
+    city = Column(Integer, ForeignKey('city.id'))
+
+    bank_number = Column(String(16), nullable=True)
+    
 
 class CustomerRegister(BookTankBase):
     user: UserCreate
