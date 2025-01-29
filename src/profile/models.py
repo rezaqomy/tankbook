@@ -1,6 +1,8 @@
 from typing import Optional
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Enum
 from datetime import datetime
+
+from sqlalchemy.orm import relationship
 from src.schemas import BookTankBase
 from src.enums import SubscriptionModel
 from src.auth.models import UserCreate, UserRead
@@ -21,8 +23,8 @@ class City(Base, PrimaryKeyMixin):
 class Author(Base):
     user_id = Column(Integer, ForeignKey('user.id'), primary_key=True, nullable=False)
     city = Column(Integer, ForeignKey('city.id'))
-
     bank_number = Column(String(16), nullable=True)
+    books = relationship("BookAuthor", back_populates="author")
     
 
 class CustomerRegister(BookTankBase):
