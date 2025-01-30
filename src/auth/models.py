@@ -10,7 +10,7 @@ from src.schemas import BookTankBase, PrimaryKey
 
 
 from src.enums import UserRoles
-from src.config import settings
+from src.config import EMAIL_REGEX, IRAN_PHONE_NUMBER_REGEX, settings
 
 from jose import jwt
 
@@ -84,15 +84,15 @@ class UserCreate(BookTankBase):
     username: str
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: str = Field(None, nullable=True)
-    phone_number: str = Field(None, nullable=True)
-    email: EmailStr = Field(None, nullable=True)
+    phone_number: str = Field(None, nullable=True, pattern=IRAN_PHONE_NUMBER_REGEX)
+    email: EmailStr = Field(None, nullable=True, pattern=EMAIL_REGEX)
     password: Optional[str] = Field(None, nullable=True)
 
 class UserUpdate(UserBase):
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
-    phone_number: Optional[str] = Field(default=None, nullable=True)
-    email: Optional[EmailStr] = Field(default=None, nullable=True)
+    phone_number: Optional[str] = Field(default=None, nullable=True, pattern=IRAN_PHONE_NUMBER_REGEX)
+    email: Optional[EmailStr] = Field(default=None, nullable=True, pattern=EMAIL_REGEX)
     role: Optional[UserRoles] = Field(default=None, nullable=True)
     exp: Optional[float] = Field(default=None, nullable=True)
 
