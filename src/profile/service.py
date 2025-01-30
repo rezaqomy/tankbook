@@ -1,6 +1,11 @@
 
 from datetime import UTC
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import delete
+from sqlalchemy.sql.functions import user
+from src.reserve.models import Reserve
 from src.enums import SubscriptionModel
 from src.database.core import DbSession
 from src.auth.service import create_user
@@ -38,3 +43,27 @@ class CustomerService:
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         return customer
+    
+    
+
+    @staticmethod
+    async def delete_customer(db_session: DbSession, user_id: int):
+        try:
+            # Check if the customer has any reservations
+            result = await db_session.execute(select(Reserve).where(Reserve.customer_id == user_id))
+            reservations = result.scalars().all()
+
+            if reservations:
+                raise HTTPException(status_code=400, detail="Cannot delete customer with active reservations.")
+
+            customer = await db_session.get(Customer, user_id)
+            if customer:
+                await db_session.delete(customer)
+                await db_session.commit()
+                return {"message": "Customer deleted successfully"}
+            else:
+                raise HTTPException(status_code=404, detail="Customer not found")
+
+        except IntegrityError:
+            await db_session.rollback()
+            raise HTTPException(status_code=400, detail="Cannot delete customer as they have linked reservations.")
