@@ -126,4 +126,21 @@ class BookService:
         )
         book_loaded = result.scalars().first()
         return book_loaded
+    
+    @staticmethod
+    async def delete_book(db: DbSession, book_id: int):
+        # First, fetch the book to ensure it exists
+        result = await db.execute(select(Book).filter(Book.id == book_id))
+        book = result.scalars().first()
+        if not book:
+            raise HTTPException(status_code=404, detail="Book not found")
 
+        # Delete related BookAuthor entries
+        await db.execute(delete(BookAuthor).where(BookAuthor.book_id == book_id))
+        await db.commit()
+
+        # Now delete the book itself
+        await db.execute(delete(Book).where(Book.id == book_id))
+        await db.commit()
+
+        return {"detail": "Book deleted successfully"}
