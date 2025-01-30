@@ -93,7 +93,6 @@ class UserUpdate(UserBase):
     last_name: Optional[str] = Field(default=None, nullable=True)
     phone_number: Optional[str] = Field(default=None, nullable=True, pattern=IRAN_PHONE_NUMBER_REGEX)
     email: Optional[EmailStr] = Field(default=None, nullable=True, pattern=EMAIL_REGEX)
-    role: Optional[UserRoles] = Field(default=None, nullable=True)
     exp: Optional[float] = Field(default=None, nullable=True)
 
 class UserRead(UserBase):

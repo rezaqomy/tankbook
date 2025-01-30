@@ -41,7 +41,7 @@ async def create_user_view(user: UserCreate, db: DbSession):
 
 
 @user_router.patch("/{user_id}", 
-                response_model=UserRead,
+                response_model=UserUpdate,
                 dependencies=[Depends(current_user)]
             )
 async def update_user(
