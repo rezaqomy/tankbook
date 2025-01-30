@@ -31,3 +31,10 @@ class CustomerService:
         await db_session.refresh(customer)
 
         return customer
+    
+    @staticmethod
+    async def get_customer(*, user_id: int, db_session: DbSession) -> Customer:
+        customer = await db_session.get(Customer, user_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return customer
