@@ -95,12 +95,15 @@ async def get_current_user(request: Request, db_session: AsyncSession = Depends(
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
         id = payload.get("id")
-        if username is None:
+        exp = payload.get("exp")
+        if id is None:
             raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     except JWTError:
         raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     user = await get_by_id(db_session=db_session, id=id)
+    if user.exp != exp:
+        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Token expired")
     if not user:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="User not found")
 
