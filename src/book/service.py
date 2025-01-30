@@ -1,9 +1,9 @@
 from typing import List
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from .models import Book, BookAuthor, BookCreateSchema
+from .models import Book, BookAuthor, BookCreateSchema, UpdateBookSchema
 from src.profile.models import Author
 from src.database.core import DbSession
 
@@ -79,3 +79,51 @@ class BookService:
         if not book:
             raise HTTPException(status_code=404, detail="Book not found")
         return book
+
+    @staticmethod
+    async def update_book(db: DbSession, book_id: int, book_data: UpdateBookSchema):
+        result = await db.execute(
+            select(Book).options(selectinload(Book.authors)).filter(Book.id == book_id)
+        )
+        book = result.scalars().first()
+        if not book:
+            raise HTTPException(status_code=404, detail="Book not found")
+
+        # Check if new ISBN is unique
+        if book_data.isbn:
+            existing_book = await db.execute(select(Book).filter(Book.isbn == book_data.isbn, Book.id != book_id))
+            if existing_book.scalars().first():
+                raise HTTPException(status_code=400, detail="ISBN must be unique")
+
+        # Update fields if provided
+        for field, value in book_data.model_dump(exclude_unset=True).items():
+            setattr(book, field, value)
+        
+        await db.commit()
+        await db.refresh(book)
+
+
+        if book_data.author_ids is not None:
+            await db.execute(delete(BookAuthor).where(BookAuthor.book_id == book_id))
+            await db.commit()
+
+        # Update authors if provided
+        if book_data.author_ids and book_data.blurbs:
+            if len(book_data.author_ids) != len(book_data.blurbs):
+                raise HTTPException(status_code=400, detail="Each author must have a corresponding blurb")
+
+            # Add new author relationships
+            for author_id, blurb in zip(book_data.author_ids, book_data.blurbs):
+                book_author = BookAuthor(book_id=book_id, author_id=author_id, blurb=blurb)
+                db.add(book_author)
+
+            await db.commit()
+            await db.flush()
+        result = await db.execute(
+            select(Book)
+            .options(selectinload(Book.authors).selectinload(BookAuthor.author))
+            .filter(Book.id == book.id)
+        )
+        book_loaded = result.scalars().first()
+        return book_loaded
+
