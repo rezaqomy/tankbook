@@ -28,3 +28,8 @@ async def get_books(db: DbSession):
 async def update_book(id: int, book_data: UpdateBookSchema, db: DbSession):
     updated_book = await BookService.update_book(db, id, book_data)
     return updated_book
+
+@book_router.delete("/{id}", response_model=dict)
+async def delete_book(id: int, db: DbSession):
+    response = await BookService.delete_book(db, id)
+    return response
