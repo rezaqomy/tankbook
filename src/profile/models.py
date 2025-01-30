@@ -26,6 +26,15 @@ class Author(Base):
     bank_number = Column(String(16), nullable=True)
     books = relationship("BookAuthor", back_populates="author")
     
+class AuthorRegister(BookTankBase):
+    user: UserCreate
+    city: int
+    bank_number: Optional[str]
+
+class AuthorRead(BookTankBase):
+    user_id: int
+    city: int
+    bank_number: Optional[str]
 
 class CustomerRegister(BookTankBase):
     user: UserCreate
