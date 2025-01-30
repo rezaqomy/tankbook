@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 
 from .service import BookService, get_by_isbn
 from src.database.core import DbSession
-from .models import Book, BookCreateSchema, BookResponse
+from .models import Book, BookCreateSchema, BookResponse, UpdateBookSchema
 
 
 book_router = APIRouter(prefix="/book", tags=["book"])
@@ -23,3 +23,8 @@ async def get_book(id: int, db: DbSession):
 async def get_books(db: DbSession):
     db_books = await BookService.get_all_books(db)
     return db_books
+
+@book_router.put("/{id}", response_model=BookResponse)
+async def update_book(id: int, book_data: UpdateBookSchema, db: DbSession):
+    updated_book = await BookService.update_book(db, id, book_data)
+    return updated_book
