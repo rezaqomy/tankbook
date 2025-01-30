@@ -1,5 +1,5 @@
 import re
-from typing import Annotated
+from typing import Annotated, AsyncGenerator
 
 from fastapi import Depends
 from sqlalchemy import create_engine, inspect, Column, Integer, DateTime
@@ -7,7 +7,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker,AsyncSession
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.sql.functions import current_timestamp 
-
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from fastapi import Depends
 
 
 from src.config import settings
@@ -38,14 +40,18 @@ class CustomBase:
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
 
-async def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception as e:
-        raise e
-    finally:
-        await db.close()
+AsyncSessionLocal = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
