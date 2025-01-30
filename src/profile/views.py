@@ -61,3 +61,12 @@ async def update_customer_view(
     await db_session.refresh(customer)
 
     return customer
+
+
+@profile_route.delete("/customer/{user_id}", status_code=204)
+async def delete_customer_view(
+    user_id: int,
+    db_session: DbSession,
+):
+    await CustomerService.delete_customer(user_id=user_id, db_session=db_session)
+    return None
