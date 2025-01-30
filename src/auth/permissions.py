@@ -31,6 +31,11 @@ class BasePermission(ABC):
 
 
 class AdminPermission(BasePermission):
+    def __init__(self, request: Request, user: User):
+        self.user = user
+        self.role = user.role
+        self.request = request
+
     def has_permission(self) -> bool:
         return self.role == UserRoles.ADMIN
 
