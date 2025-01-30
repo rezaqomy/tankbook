@@ -1,17 +1,24 @@
 from typing import List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
+from src.auth.service import CurrentUser
+from src.auth.dependencies import admin_permission, author_or_admin_permissasion
+
 from .service import BookService, get_by_isbn
 from src.database.core import DbSession
+from src.enums import UserRoles
 from .models import Book, BookCreateSchema, BookResponse, UpdateBookSchema
 
 
 book_router = APIRouter(prefix="/book", tags=["book"])
 
-@book_router.post("/", response_model=BookResponse) 
-async def create_book(book_data: BookCreateSchema, db: DbSession):
+@book_router.post("/", response_model=BookResponse, dependencies=[Depends(author_or_admin_permissasion)]) 
+async def create_book(book_data: BookCreateSchema, db: DbSession, user: CurrentUser):
+    if user.role == UserRoles.AUTHOR:
+        book_data.author_ids = [user.id]
+        book_data.blurbs = [user.first_name]
     book = await BookService.create_book(db, book_data, book_data.author_ids, book_data.blurbs)
     return book
 @book_router.get("/{id}", response_model=BookResponse)

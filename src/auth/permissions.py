@@ -57,3 +57,11 @@ class CurrentUserOrAdminPermission(BasePermission):
     def has_permission(self) -> bool:
         return any([self.user.id == self.user_id, self.user.role == UserRoles.ADMIN])
 
+class AuthorOrAdminPermission(BasePermission):
+    def __init__(self, request: Request, user: User):
+        self.user = user
+        self.request = request
+
+    def has_permission(self) -> bool:
+        return any([self.user.role == UserRoles.AUTHOR, self.user.role == UserRoles.ADMIN])
+
