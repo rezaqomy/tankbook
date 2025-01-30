@@ -88,11 +88,23 @@ class UserCreate(BookTankBase):
     email: EmailStr = Field(None, nullable=True)
     password: Optional[str] = Field(None, nullable=True)
 
+class UserUpdate(UserBase):
+    first_name: Optional[str] = Field(default=None, nullable=True)
+    last_name: Optional[str] = Field(default=None, nullable=True)
+    phone_number: Optional[str] = Field(default=None, nullable=True)
+    email: Optional[EmailStr] = Field(default=None, nullable=True)
+    role: Optional[UserRoles] = Field(default=None, nullable=True)
+    exp: Optional[float] = Field(default=None, nullable=True)
+
 class UserRead(UserBase):
     id: PrimaryKey
     username: str
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
+    phone_number: Optional[str] = Field(default=None, nullable=True)
+    email: Optional[EmailStr] = Field(default=None, nullable=True)
+    role: UserRoles
+    exp: Optional[float] = Field(default=None, nullable=True)
 
 class UserLogin(UserBase):
     password: str
