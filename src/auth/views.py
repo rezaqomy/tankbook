@@ -74,6 +74,22 @@ async def get_all_users(
     result = await db.execute(stmt)
     return result.scalars().all()
 
+@user_router.delete("/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: DbSession,
+):
+    user = await get_by_id(db_session=db, id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    db.delete(user)
+    await db.commit()
+    return {"message": "User deleted successfully"}
+
+
 @auth_router.get("/me", response_model=UserRead)
 async def get_me(
     user: CurrentUser,
