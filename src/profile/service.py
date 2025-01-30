@@ -5,11 +5,36 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import delete
 from sqlalchemy.sql.functions import user
+from starlette.status import HTTP_404_NOT_FOUND
 from src.reserve.models import Reserve
-from src.enums import SubscriptionModel
+from src.enums import SubscriptionModel, UserRoles
 from src.database.core import DbSession
 from src.auth.service import create_user
-from .models import Customer, CustomerRegister, CustomerUpdate
+from .models import City, Customer, CustomerRegister, CustomerUpdate, AuthorRegister, Author
+
+
+class CityService:
+    @staticmethod
+    async def get_city(*, city_id: int, db_session: DbSession) -> City | None:
+        city = await db_session.get(City, city_id)
+        if not city:
+            raise HTTPException(HTTP_404_NOT_FOUND, detail=f"The city with id {city_id} not found!")
+        return city
+
+
+class AuthorService:
+    @staticmethod
+    async def create(*, author: AuthorRegister, db_session: DbSession) -> Author:
+        if await CityService.get_city(city_id=author.city, db_session=db_session) is None:
+            raise HTTPException(HTTP_404_NOT_FOUND, detail=f"The city with id {author.city} not found!")
+
+        user = await create_user(user=author.user, db_session=db_session, role=UserRoles.AUTHOR)
+        author_db = Author(user_id=user.id, city=author.city, bank_number=author.bank_number)
+        db_session.add(author_db)
+        await db_session.commit()
+        await db_session.refresh(author_db)
+        return author_db
+
 
 class CustomerService:
     @staticmethod
