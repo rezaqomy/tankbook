@@ -3,7 +3,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
-from .models import Book, BookAuthor, BookCreateSchema, UpdateBookSchema
+from .models import Book, BookAuthor, BookCreateSchema, Gener, UpdateBookSchema
 from src.profile.models import Author
 from src.database.core import DbSession
 
@@ -20,6 +20,15 @@ async def get_by_isbn(*, db_session: DbSession, isbn: str) -> Book | None:
     result = await db_session.execute(select(Book).filter(Book.isbn == isbn))
     return result.scalar_one_or_none()
 
+class GenerService:
+    @staticmethod
+    async def get_gener(db: DbSession, gener_id: int):
+        result = await db.execute(select(Gener).filter(Gener.id == gener_id))
+        gener = result.scalars().first()
+        if not gener:
+            raise HTTPException(status_code=404, detail="Gener not found")
+        return gener
+
 
 class BookService:
     
@@ -28,6 +37,9 @@ class BookService:
         # Check if ISBN is already taken
         if await get_by_isbn(db_session=db, isbn=book_data.isbn):
             raise HTTPException(status_code=400, detail=f"Book with ISBN {book_data.isbn} already exists")
+
+        if await GenerService.get_gener(db, book_data.gener) is None:
+            raise HTTPException(status_code=404, detail="Gener not found")
 
         # Ensure each author has a matching blurb
         if len(author_ids) != len(blurbs):
@@ -89,6 +101,8 @@ class BookService:
         if not book:
             raise HTTPException(status_code=404, detail="Book not found")
 
+        if book_data.gener is not None and await GenerService.get_gener(db, book_data.gener) is None:
+            raise HTTPException(status_code=404, detail="Gener not found")
         # Check if new ISBN is unique
         if book_data.isbn:
             existing_book = await db.execute(select(Book).filter(Book.isbn == book_data.isbn, Book.id != book_id))
