@@ -66,3 +66,12 @@ class BookResponse(BookTankBase):
     description: Optional[str]
     unit: int
     authors: List[BookAuthorResponse]
+
+class UpdateBookSchema(BookCreateSchema):
+    title: Optional[str] = None
+    isbn: Optional[str] = None
+    price: Optional[int] = None
+    description: Optional[str] = None
+    unit: Optional[int] = None
+    author_ids: Optional[List[int]] = None
+    blurbs: Optional[List[str]] = None
