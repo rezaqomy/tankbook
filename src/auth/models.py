@@ -33,6 +33,7 @@ class User(Base, TimeStampMixin, PrimaryKeyMixin):
     phone_number = Column(String, unique=True, nullable=True)
     password = Column(LargeBinary, nullable=False)
     role = Column(String, default=UserRoles.CUSTOMER)
+    exp = Column(Integer, nullable=True)
 
 
     def verify_password(self, password: str) -> bool:
@@ -63,13 +64,8 @@ class User(Base, TimeStampMixin, PrimaryKeyMixin):
         data = {
             "exp": exp,
             "id": self.id,
-            "username": self.username,
-            "first_name": self.first_name,
-            "last_name": self.last_name,
-            "phone_number": self.phone_number,
-            "email": self.email,
-            "role": self.role,
         }
+        self.exp = exp
         return jwt.encode(data, JWT_SECRET, algorithm=JWT_ALG)
 
 
