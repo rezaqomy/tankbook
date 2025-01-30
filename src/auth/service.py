@@ -12,7 +12,7 @@ from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND
 
 from src.enums import UserRoles
 from src.database.core import DbSession, get_db
-from .models import (UserCreate, User)
+from .models import (UserCreate, User, UserUpdate)
 from src.config import settings
 
 
@@ -78,6 +78,16 @@ async def create_user(user: UserCreate, db_session: DbSession, role: UserRoles =
     await db_session.commit()
     await db_session.refresh(db_user)
     return db_user
+
+
+async def update_user(*, db_session: DbSession, user: User, user_in: UserUpdate) -> User:
+    """Update user object"""
+    for field in user_in.dict(exclude_unset=True):
+        setattr(user, field, user_in.dict()[field])
+
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
 
 
 
