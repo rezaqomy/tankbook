@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi.openapi.models import APIKey, APIKeyIn, SecuritySchemeType
 from pydantic import EmailStr, ValidationError, validator, Field
-from sqlalchemy import Column, ForeignKey, Integer, String, LargeBinary, Boolean, DateTime
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, LargeBinary, Boolean, DateTime
 
 
 from src.database.core import Base
@@ -33,7 +33,7 @@ class User(Base, TimeStampMixin, PrimaryKeyMixin):
     phone_number = Column(String, unique=True, nullable=True)
     password = Column(LargeBinary, nullable=False)
     role = Column(String, default=UserRoles.CUSTOMER)
-    exp = Column(Integer, nullable=True)
+    exp = Column(Float, nullable=True)
 
 
     def verify_password(self, password: str) -> bool:
