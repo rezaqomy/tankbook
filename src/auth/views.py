@@ -9,6 +9,8 @@ from starlette.status import HTTP_401_UNAUTHORIZED
 
 
 from src.database.core import DbSession, get_db
+from .permissions import AdminPermission, any_permission
+from .dependencies import admin_permission, current_user, current_user_or_admin
 from .service import (
     CurrentUser,
     get_by_id,
@@ -38,7 +40,10 @@ async def create_user_view(user: UserCreate, db: DbSession):
 
 
 
-@user_router.patch("/{user_id}", response_model=UserRead)
+@user_router.patch("/{user_id}", 
+                response_model=UserRead,
+                dependencies=[Depends(current_user)]
+            )
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
@@ -53,7 +58,10 @@ async def update_user(
     updated_user = await service_update_user(db_session=db, user=user, user_in=user_data)
     return updated_user
     
-@user_router.get("/{user_id}", response_model=UserRead)
+@user_router.get("/{user_id}", 
+                response_model=UserRead,
+                dependencies=[Depends(current_user_or_admin)]
+                 )
 async def get_user(
     user_id: int,
     db: DbSession,
@@ -66,7 +74,11 @@ async def get_user(
         )
     return user
 
-@user_router.get("/", response_model=List[UserRead])
+@user_router.get(
+    "/", 
+    response_model=List[UserRead],
+    dependencies=[Depends(admin_permission)]
+)
 async def get_all_users(
     db: DbSession,
 ):
@@ -74,7 +86,9 @@ async def get_all_users(
     result = await db.execute(stmt)
     return result.scalars().all()
 
-@user_router.delete("/{user_id}")
+@user_router.delete("/{user_id}",
+                dependencies=[Depends(admin_permission)]
+            )
 async def delete_user(
     user_id: int,
     db: DbSession,
@@ -85,7 +99,7 @@ async def delete_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    db.delete(user)
+    await db.delete(user)
     await db.commit()
     return {"message": "User deleted successfully"}
 
