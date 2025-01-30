@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.sql import select
 
 from src.database.core import DbSession
-from .models import CustomerGet, CustomerRead, CustomerUpdate, Customer, CustomerUpdateResponse
+from .models import CustomerGet, CustomerRead, CustomerRegister, CustomerUpdate, Customer, CustomerUpdateResponse
 from .service import CustomerService
 
 
@@ -19,7 +19,7 @@ async def get_all_customers(db: DbSession):
 
 @profile_route.post('/customer', response_model=CustomerRead)
 async def create_customer_view(
-    customer: CustomerRead,
+    customer: CustomerRegister,
     db_session: DbSession,
     ):
     new_customer = await CustomerService.create(customer=customer, db_session=db_session)
