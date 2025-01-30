@@ -1,4 +1,5 @@
 import re
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, security, status
 from fastapi.security.oauth2 import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import ValidationError
@@ -10,7 +11,9 @@ from starlette.status import HTTP_401_UNAUTHORIZED
 from src.database.core import DbSession, get_db
 from .service import (
     CurrentUser,
+    get_by_id,
     get_by_username,
+    update_user as service_update_user,
     create_user as service_create_user,
 )
 from .models import (
@@ -19,6 +22,7 @@ from .models import (
         UserCreate,
         UserLogin,
         UserLoginResponse,
+        UserUpdate,
 )
 
 
@@ -34,13 +38,47 @@ async def create_user_view(user: UserCreate, db: DbSession):
 
 
 
+@user_router.patch("/{user_id}", response_model=UserRead)
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    db: DbSession,
+):
+    user = await get_by_id(db_session=db, id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    updated_user = await service_update_user(db_session=db, user=user, user_in=user_data)
+    return updated_user
+    
+@user_router.get("/{user_id}", response_model=UserRead)
+async def get_user(
+    user_id: int,
+    db: DbSession,
+):
+    user = await get_by_id(db_session=db, id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return user
+
+@user_router.get("/", response_model=List[UserRead])
+async def get_all_users(
+    db: DbSession,
+):
+    stmt = select(User)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
 @auth_router.get("/me", response_model=UserRead)
 async def get_me(
     user: CurrentUser,
 ):
     return user
-
-    
 
 
 @auth_router.post("/login", response_model=UserLoginResponse)
