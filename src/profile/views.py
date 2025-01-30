@@ -1,7 +1,10 @@
 from typing import List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.sql import select
 
+from src.auth import dependencies
+from src.auth.dependencies import admin_permission, current_user_or_admin
+from src.auth.permissions import AdminPermission
 from src.database.core import DbSession
 from .models import AuthorRead, AuthorRegister, CustomerGet, CustomerRead, CustomerRegister, CustomerUpdate, Customer, CustomerUpdateResponse
 from .service import AuthorService, CustomerService
@@ -10,7 +13,7 @@ from .service import AuthorService, CustomerService
 profile_route = APIRouter(prefix="/profile", tags=["profile"])
 
 
-@profile_route.get("/customers", response_model=List[CustomerGet])
+@profile_route.get("/customers", response_model=List[CustomerGet], dependencies=[Depends(admin_permission)])
 async def get_all_customers(db: DbSession):
     # Asynchronous query
     result = await db.execute(select(Customer))
@@ -30,10 +33,10 @@ async def create_customer_view(
         "wallet_money": new_customer.wallet_money
     }
 
-@profile_route.get("/customer/{customer_id}", response_model=CustomerGet)
-async def get_one_customer(customer_id: int, db: DbSession):
+@profile_route.get("/customer/{user_id}", response_model=CustomerGet, dependencies=[Depends(current_user_or_admin)])
+async def get_one_customer(user_id: int, db: DbSession):
     # Asynchronous query to get a single customer
-    result = await db.execute(select(Customer).filter(Customer.user == customer_id))
+    result = await db.execute(select(Customer).filter(Customer.user == user_id))
     customer = result.scalars().first()
 
     if not customer:
@@ -43,7 +46,7 @@ async def get_one_customer(customer_id: int, db: DbSession):
 
 
 
-@profile_route.patch('/customer/{user_id}', response_model=CustomerUpdateResponse)
+@profile_route.patch('/customer/{user_id}', response_model=CustomerUpdateResponse, dependencies=[Depends(admin_permission)])
 async def update_customer_view(
     user_id: int,
     customer_update: CustomerUpdate,
@@ -63,7 +66,7 @@ async def update_customer_view(
     return customer
 
 
-@profile_route.delete("/customer/{user_id}", status_code=204)
+@profile_route.delete("/customer/{user_id}", status_code=204 , dependencies=[Depends(admin_permission)])
 async def delete_customer_view(
     user_id: int,
     db_session: DbSession,
