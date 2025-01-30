@@ -28,6 +28,7 @@ class Book(Base, PrimaryKeyMixin, TimeStampMixin):
     title = Column(String(255), nullable=False)
     isbn = Column(String(13), nullable=False, unique=True)
     price = Column(Integer, nullable=False, default=0)
+    gener = Column(Integer, ForeignKey('gener.id'), nullable=False)
     description = Column(String(2056), nullable=True)
     unit = Column(Integer, default=0, nullable=False)
 
@@ -37,6 +38,7 @@ class BookCreateSchema(BookTankBase):
     title: str = Field(..., max_length=255)
     isbn: str = Field(..., max_length=13)
     price: int = Field(..., ge=0)
+    gener: int
     description: Optional[str] = Field(None, max_length=2056)
     unit: int = Field(0, ge=0)
     author_ids: List[int]
@@ -63,6 +65,7 @@ class BookResponse(BookTankBase):
     title: str
     isbn: str
     price: int
+    gener: int
     description: Optional[str]
     unit: int
     authors: List[BookAuthorResponse]
@@ -71,6 +74,7 @@ class UpdateBookSchema(BookCreateSchema):
     title: Optional[str] = None
     isbn: Optional[str] = None
     price: Optional[int] = None
+    gener: Optional[int] = None
     description: Optional[str] = None
     unit: Optional[int] = None
     author_ids: Optional[List[int]] = None
