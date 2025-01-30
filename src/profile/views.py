@@ -3,11 +3,11 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.sql import select
 
 from src.database.core import DbSession
-from .models import CustomerGet, CustomerRead, CustomerRegister, CustomerUpdate, Customer, CustomerUpdateResponse
-from .service import CustomerService
+from .models import AuthorRead, AuthorRegister, CustomerGet, CustomerRead, CustomerRegister, CustomerUpdate, Customer, CustomerUpdateResponse
+from .service import AuthorService, CustomerService
 
 
-profile_route = APIRouter(prefix="/profile", tags=["profile", "customer"])
+profile_route = APIRouter(prefix="/profile", tags=["profile"])
 
 
 @profile_route.get("/customers", response_model=List[CustomerGet])
@@ -70,3 +70,9 @@ async def delete_customer_view(
 ):
     await CustomerService.delete_customer(user_id=user_id, db_session=db_session)
     return None
+
+
+@profile_route.post('/author', response_model=AuthorRead)
+async def create_author_view(author: AuthorRegister, db_session: DbSession):
+    new_author = await AuthorService.create(author=author, db_session=db_session)
+    return new_author
