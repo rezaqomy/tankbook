@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, UTC
 
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND
 
+from src.enums import UserRoles
 from src.database.core import DbSession, get_db
 from .models import (UserCreate, User)
 from src.config import settings
@@ -49,7 +50,7 @@ async def get_by_phone_number(*, db_session: DbSession, phone_number: str) -> Op
     return result.scalars().one_or_none()
 
 
-async def create_user(user: UserCreate, db_session: DbSession) -> Optional[User]:
+async def create_user(user: UserCreate, db_session: DbSession, role: UserRoles = UserRoles.CUSTOMER) -> Optional[User]:
     # Check if username already exists
     if await get_by_username(db_session=db_session, username=user.username):
         raise HTTPException(
@@ -71,7 +72,7 @@ async def create_user(user: UserCreate, db_session: DbSession) -> Optional[User]
             detail="A user with this email already exists.",
         )
 
-    db_user = User(**user.dict(exclude={"password"}))
+    db_user = User(**user.dict(exclude={"password", "role"}), role=role)
     db_user.set_password(user.password)
     db_session.add(db_user)
     await db_session.commit()
