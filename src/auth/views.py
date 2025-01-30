@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException, security, status
 from fastapi.security.oauth2 import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import ValidationError
@@ -49,7 +50,11 @@ async def login_user(
 ):
     user = await get_by_username(db_session=db_session, username=user_in.username)
     if user and user.verify_password(user_in.password):
-        return {"token": user.token}
+        token = user.token
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+        return {"token": token}
 
     
     raise HTTPException(
