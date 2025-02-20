@@ -1,0 +1,4370 @@
+===== alembic.ini =====
+# A generic, single database configuration.
+
+[alembic]
+# path to migration scripts
+# Use forward slashes (/) also on windows to provide an os agnostic path
+script_location = src/shared_kernel/database/migrations
+
+# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
+# Uncomment the line below if you want the files to be prepended with date and time
+# see https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-ini-file
+# for all available tokens
+# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
+file_template = %%(year)d-%%(month).2d-%%(day).2d_%%(rev)s
+
+# sys.path path, will be prepended to sys.path if present.
+# defaults to the current working directory.
+prepend_sys_path = .
+
+# timezone to use when rendering the date within the migration file
+# as well as the filename.
+# If specified, requires the python>=3.9 or backports.zoneinfo library and tzdata library.
+# Any required deps can installed by adding `alembic[tz]` to the pip requirements
+# string value is passed to ZoneInfo()
+# leave blank for localtime
+# timezone =
+
+# max length of characters to apply to the "slug" field
+# truncate_slug_length = 40
+
+# set to 'true' to run the environment during
+# the 'revision' command, regardless of autogenerate
+# revision_environment = false
+
+# set to 'true' to allow .pyc and .pyo files without
+# a source .py file to be detected as revisions in the
+# versions/ directory
+# sourceless = false
+
+# version location specification; This defaults
+# to shared_kernel/database/migrations/versions.  When using multiple version
+# directories, initial revisions must be specified with --version-path.
+# The path separator used here should be the separator specified by "version_path_separator" below.
+# version_locations = %(here)s/bar:%(here)s/bat:shared_kernel/database/migrations/versions
+
+# version path separator; As mentioned above, this is the character used to split
+# version_locations. The default within new alembic.ini files is "os", which uses os.pathsep.
+# If this key is omitted entirely, it falls back to the legacy behavior of splitting on spaces and/or commas.
+# Valid values for version_path_separator are:
+#
+# version_path_separator = :
+# version_path_separator = ;
+# version_path_separator = space
+# version_path_separator = newline
+#
+# Use os.pathsep. Default configuration used for new projects.
+version_path_separator = os
+
+# set to 'true' to search source files recursively
+# in each "version_locations" directory
+# new in Alembic version 1.10
+# recursive_version_locations = false
+
+# the output encoding used when revision files
+# are written from script.py.mako
+# output_encoding = utf-8
+
+#sqlalchemy.url = driver://user:pass@localhost/dbname
+
+
+[post_write_hooks]
+# post_write_hooks defines scripts or Python functions that are run
+# on newly generated revision scripts.  See the documentation for further
+# detail and examples
+
+# format using "black" - use the console_scripts runner, against the "black" entrypoint
+# hooks = black
+# black.type = console_scripts
+# black.entrypoint = black
+# black.options = -l 79 REVISION_SCRIPT_FILENAME
+
+# lint with attempts to fix using "ruff" - use the exec runner, execute a binary
+# hooks = ruff
+# ruff.type = exec
+# ruff.executable = %(here)s/.venv/bin/ruff
+# ruff.options = --fix REVISION_SCRIPT_FILENAME
+
+# Logging configuration
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARNING
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARNING
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+
+===== docker/beats_entrypoint.sh =====
+#!/bin/sh
+
+echo "--> Waiting for db to be ready"
+./wait-for-it.sh postgres:5432
+./wait-for-it.sh mongo:27017
+
+echo "--> Starting beats process"
+celery -A src.celerybeat_schedule.celery_app beat --loglevel=info
+
+===== docker/celery_entrypoint.sh =====
+#!/bin/sh
+
+echo "--> Waiting for db to be ready"
+./wait-for-it.sh postgres:5432
+./wait-for-it.sh mongo:27017
+
+
+echo "--> Starting celery process"
+celery -A src.shared_kernel.celery_app.celery_app worker --loglevel=info
+
+===== docker-compose.yml =====
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    env_file:
+      - .env
+
+  mongo:
+    image: mongo:6
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    env_file:
+      - .env 
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    env_file:
+      - .env
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: docker/production.Dockerfile
+    container_name: fastapi
+    command: ./docker/web_entrypoint.sh
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - mongo
+      - rabbitmq
+      - redis
+    restart: on-failure
+
+
+  celery:
+    build:
+      context: .
+      dockerfile: docker/production.Dockerfile
+    # command: celery -A sareban.tasks worker -l info --without-gossip --without-mingle --without-heartbeat
+    container_name: worker
+    command: ./docker/celery_entrypoint.sh
+    volumes:
+      - .:/app
+    depends_on:
+      - postgres
+      - mongo
+      - rabbitmq
+      - redis
+    restart: on-failure
+
+  beats:
+    build:
+      context: .
+      dockerfile: docker/production.Dockerfile
+    # command: celery -A sareban.tasks beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    container_name: beats
+    command: ./docker/beats_entrypoint.sh
+    volumes:
+      - .:/app
+    depends_on:
+      - postgres
+      - mongo
+      - rabbitmq
+      - redis
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  mongo_data:
+  pgadmin_data:
+
+===== docker/production.Dockerfile =====
+FROM python:3.12
+
+
+ADD requirements/ requirements/
+RUN pip install -r requirements/production.txt
+
+RUN mkdir /app
+WORKDIR /app
+ADD ./ /app/
+
+===== docker/web_entrypoint.sh =====
+#!/bin/sh
+
+echo "--> Waiting for db to be ready"
+./wait-for-it.sh postgres:5432
+./wait-for-it.sh mongo:27017
+
+# Apply database migrations
+echo "Apply database migrations"
+alembic upgrade head
+
+# Start server
+echo "--> Starting web process"
+uvicorn src.main:app --host 0.0.0.0
+
+===== .env.example =====
+POSTGRES_URL=postgresql+asyncpg://user:password@postgres:5432/book
+APP_ENV=development
+DEBUG=True
+JWT_SECRET=9be0c07f5b79dc04b25fdd5ec51dcafd40b9c41352cc373aa88944c3d904dd66
+JWT_ALG=HS256
+JWT_EXP=36000
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=book
+
+PGADMIN_DEFAULT_EMAIL=admin@example.com
+PGADMIN_DEFAULT_PASSWORD=admin
+
+MONGO_URL=mongodb://user:password@mongo:27017
+MONGO_USER=user
+MONGO_PASSWORD=password
+
+
+RABBITMQ_USER=user
+RABBITMQ_PASSWORD=password
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_VHOST=/
+RABBITMQ_QUEUE=add
+CELERY_BROKER_URL=amqp://user:password@rabbitmq:5672//
+CELERY_RESULT_BACKEND=rpc://
+
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+===== .gitignore =====
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# UV
+#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#uv.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+# Ruff stuff:
+.ruff_cache/
+
+# PyPI configuration file
+.pypirc
+
+===== requirements/base.txt =====
+alembic==1.14.1
+annotated-types==0.7.0
+anyio==4.8.0
+asyncpg==0.30.0
+bcrypt==4.2.1
+certifi==2025.1.31
+click==8.1.8
+dnspython==2.7.0
+ecdsa==0.19.0
+email_validator==2.2.0
+fastapi==0.115.8
+fastapi-cli==0.0.7
+greenlet==3.1.1
+h11==0.14.0
+httpcore==1.0.7
+httptools==0.6.4
+httpx==0.28.1
+idna==3.10
+itsdangerous==2.2.0
+Jinja2==3.1.5
+Mako==1.3.9
+markdown-it-py==3.0.0
+MarkupSafe==3.0.2
+mdurl==0.1.2
+orjson==3.10.15
+pyasn1==0.6.1
+pydantic==2.10.6
+pydantic-extra-types==2.10.2
+pydantic-settings==2.7.1
+pydantic_core==2.27.2
+Pygments==2.19.1
+python-dotenv==1.0.1
+python-jose==3.3.0
+python-multipart==0.0.20
+PyYAML==6.0.2
+rich==13.9.4
+rich-toolkit==0.13.2
+rsa==4.9
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
+SQLAlchemy==2.0.38
+SQLAlchemy-Utils==0.41.2
+starlette==0.45.3
+typer==0.15.1
+typing_extensions==4.12.2
+ujson==5.10.0
+uvicorn==0.34.0
+uvloop==0.21.0
+watchfiles==1.0.4
+websockets==14.2
+dependency-injector==4.45.0
+mongoengine==0.29.1
+aiofiles==23.1.0
+celery==5.2.7
+pytest==7.2.2
+redis==4.5.4
+requests==2.28.2
+
+===== requirements.dev.txt =====
+-r requirements/dev.txt
+
+===== requirements/dev.txt =====
+-r base.txt
+black==25.1.0
+
+===== requirements/production.txt =====
+-r base.txt
+
+===== requirements.txt =====
+-r requirements/production.txt
+
+===== src/auth/adapters/data_models/__init__.py =====
+from .user_data_model import User
+
+===== src/auth/adapters/data_models/user_data_model.py =====
+from sqlalchemy import Column, String, Enum, DateTime
+
+
+from src.shared_kernel.database.async_postgres_database import Base
+from src.shared_kernel.database.mixin import (
+    PrimaryKeyMixin,
+    TimeStampMixin,
+    SoftDeleteMixin,
+)
+from src.auth.enums import UserRoles
+
+
+class User(Base, PrimaryKeyMixin, TimeStampMixin, SoftDeleteMixin):
+    username = Column(String(255), unique=True, nullable=False)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
+    email = Column(String(255), unique=True, nullable=True)
+    phone_number = Column(String(11), unique=True, nullable=True)
+    password = Column(String, nullable=False)
+    role = Column(Enum(UserRoles), default=UserRoles.CUSTOMER, nullable=False)
+    expiration_token_date = Column(DateTime, nullable=True)
+
+===== src/auth/adapters/__init__.py =====
+
+===== src/auth/adapters/mappers.py =====
+from src.shared_kernel.abstract_mapper import DataMapper
+from src.auth.domain.entities.user import User
+from src.auth.adapters.data_models.user_data_model import User as UserDB
+
+
+class UserMapper(DataMapper[User, UserDB]):
+    @staticmethod
+    def model_to_entity(instance: UserDB) -> User:
+        return User(
+            id=instance.id,
+            username=instance.username,
+            first_name=instance.first_name,
+            last_name=instance.last_name,
+            email=instance.email,
+            phone_number=instance.phone_number,
+            password=instance.password,
+            role=instance.role,
+            expiration_token_date=instance.expiration_token_date,
+        )
+
+    @staticmethod
+    def entity_to_model(entity: User) -> UserDB:
+        return UserDB(
+            id=entity.id,
+            username=entity.username,
+            first_name=entity.first_name,
+            last_name=entity.last_name,
+            email=entity.email,
+            phone_number=entity.phone_number,
+            password=entity.password,
+            expiration_token_date=entity.expiration_token_date.replace(tzinfo=None),
+        )
+
+===== src/auth/adapters/repositories/async_user_repository.py =====
+from src.shared_kernel.repository.async_abstract_repository import AsyncRepository
+from src.auth.adapters.data_models.user_data_model import User as UserDB
+from src.auth.domain.entities.user import User as UserEntity
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.auth.adapters.mappers import UserMapper
+from src.shared_kernel.config import settings
+
+JWT_EXP = settings.JWT_EXP
+
+
+class AsyncUserRepository(AsyncRepository[UserDB, int]):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, user: UserEntity) -> UserEntity:
+        user.update_expiration(JWT_EXP)
+        model_user = UserMapper.entity_to_model(user)
+        self.session.add(model_user)
+        await self.session.flush()
+        user = UserMapper.model_to_entity(model_user)
+        return user
+
+    async def find_by_username(self, username: str) -> UserEntity:
+        user = await self.find_by_col(username=username)
+        return UserMapper.model_to_entity(user)
+
+    async def get_by_id(self, id: int) -> UserEntity:
+        user = await self.find_by_col(id=id)
+        return UserMapper.model_to_entity(user)
+
+    async def update_expiration_date(self, user: UserEntity):
+        user.update_expiration(JWT_EXP)
+        model_user = UserMapper.entity_to_model(user)
+        await self.session.flush(model_user)
+        return UserMapper.model_to_entity(model_user)
+
+===== src/auth/adapters/repositories/__init__.py =====
+
+===== src/auth/domain/commands.py =====
+import re
+from typing import Optional
+from pydantic import BaseModel, Field, field_validator
+
+from src.shared_kernel.config import EMAIL_REGEX, IRAN_PHONE_NUMBER_REGEX
+
+
+def clean_phone_number(phone_number: str) -> str:
+    phone_number = re.sub(r"\D", "", phone_number)
+
+    if phone_number.startswith("98"):
+        phone_number = "0" + phone_number[2:]
+
+    if len(phone_number) != 11:
+        raise ValueError("Phone number must be 11 digits.")
+
+    return phone_number
+
+
+class BaseUserCommand(BaseModel):
+    username: str = Field(nullable=False)
+
+
+class RegisterUserCommand(BaseUserCommand):
+    first_name: Optional[str] = Field(default=None)
+    last_name: Optional[str] = Field(default=None)
+    email: Optional[str] = Field(default=None, pattern=EMAIL_REGEX)
+    phone_number: Optional[str] = Field(default=None, pattern=IRAN_PHONE_NUMBER_REGEX)
+    password: str
+
+    @field_validator("phone_number")
+    def validate_phone_number(cls, v):
+        return clean_phone_number(v)
+
+===== src/auth/domain/entities/__init__.py =====
+
+===== src/auth/domain/entities/user.py =====
+from dataclasses import dataclass
+from typing import Optional
+from datetime import datetime, timedelta, timezone
+from jose import jwt
+import bcrypt
+
+
+from src.auth.domain.commands import RegisterUserCommand
+from src.auth.entrypoints.query_params import Token
+from src.shared_kernel.domain.abstract_entity import Entity
+from src.auth.enums import UserRoles
+from src.shared_kernel.config import settings
+
+JWT_SECRET = settings.JWT_SECRET
+JWT_ALG = settings.JWT_ALG
+
+
+@dataclass
+class User(Entity):
+    id: Optional[int] = None
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
+    password: Optional[str] = None
+    role: UserRoles = UserRoles.CUSTOMER
+    expiration_token_date: Optional[datetime] = None
+
+    def set_password(self, password: str) -> None:
+        if not password:
+            raise ValueError("Password cannot be empty")
+        self.password = self.hash_password(password)
+
+    def hash_password(self, password: str) -> str:
+        pw = bytes(password, "utf-8")
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(pw, salt).decode("utf-8")
+
+    def verify_password(self, password: str) -> bool:
+        if not password or not self.password:
+            return False
+        return bcrypt.checkpw(password.encode("utf-8"), self.password.encode("utf-8"))
+
+    def update_expiration(self, value_by_seconds: int) -> None:
+        if value_by_seconds < 0:
+            raise ValueError("Expiration time cannot be negative")
+        self.expiration_token_date = datetime.now(timezone.utc) + timedelta(
+            seconds=value_by_seconds
+        )
+
+    @property
+    def access(self) -> str:
+        if not self.expiration_token_date:
+            raise ValueError("Expiration date is not set.")
+        exp = self.expiration_token_date.timestamp()
+        data = {
+            "exp": exp,
+            "id": self.id,
+        }
+        return jwt.encode(data, JWT_SECRET, algorithm=JWT_ALG)
+
+    @property
+    def token(self) -> Token:
+        return Token(access=self.access)
+
+    @staticmethod
+    def register_user(command: RegisterUserCommand) -> "User":
+        return User(**command.dict())
+
+    def __repr__(self):
+        return f"<User {self.username}>"
+
+===== src/auth/domain/__init__.py =====
+
+===== src/auth/entrypoints/__init__.py =====
+from src.auth.entrypoints.request_models import auth_router
+
+===== src/auth/entrypoints/query_params.py =====
+from pydantic import BaseModel
+from typing import Optional
+
+
+class BaseUserQuery(BaseModel):
+    id: int
+    username: str
+
+
+class UserRead(BaseUserQuery):
+    first_name: Optional[str]
+    last_name: Optional[str]
+    email: Optional[str]
+    phone_number: Optional[str]
+
+
+class LoginInput(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access: str
+
+
+class UserReadRegister(UserRead):
+    token: Token
+
+===== src/auth/entrypoints/request_models.py =====
+from typing import Annotated
+from src.auth.domain.commands import RegisterUserCommand
+from src.auth.domain.entities.user import User
+from src.auth.service_layer.command_handlers.registeration import UserRegister
+from src.auth.entrypoints.query_params import (
+    LoginInput,
+    Token,
+    UserRead,
+    UserReadRegister,
+)
+from src.auth.service_layer.auth_service import UserLogin
+from src.auth.service_layer.current_user import get_current_user
+from src.container import Container
+
+from fastapi import APIRouter, Depends, Request
+from dependency_injector.wiring import Provide, inject
+
+auth_router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+@auth_router.post("/register", response_model=UserReadRegister)
+@inject
+async def register_user(
+    command: RegisterUserCommand,
+    uc: UserRegister = Depends(Provide[Container.user_register_use_case]),
+):
+    user = await uc.execute(command)
+    await uc.uow.commit()
+    return user
+
+
+@auth_router.post("/login", response_model=Token)
+@inject
+async def login_user(
+    query: LoginInput, uc: UserLogin = Depends(Provide[Container.user_login_use_case])
+):
+    return await uc.user_login(query)
+
+
+@auth_router.get("/me", response_model=UserRead)
+async def get_me(user: Annotated[User, Depends(get_current_user)]):
+    return user
+
+===== src/auth/enums.py =====
+from src.shared_kernel.abstract_enum import BaseEnum
+
+
+class UserRoles(BaseEnum):
+    CUSTOMER = "customer"
+    ADMIN = "admin"
+    AUTHOR = "author"
+
+===== src/auth/__init__.py =====
+
+===== src/auth/service_layer/async_unit_of_work.py =====
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from src.auth.adapters.repositories.async_user_repository import AsyncUserRepository
+from src.shared_kernel.service_layer.unit_of_work.async_abstract_unit_of_work import (
+    AsyncSQLAlchemyUnitOfWork,
+)
+
+
+class UserUnitOfWork(AsyncSQLAlchemyUnitOfWork):
+    def __init__(self, engine: AsyncEngine) -> None:
+        AsyncSQLAlchemyUnitOfWork.__init__(self, engine)
+        self.repository = None
+
+    async def __aenter__(self) -> None:
+        await super().__aenter__()
+        self.repository = AsyncUserRepository(self.session)
+
+    async def commit(self):
+        await self.session.commit()
+
+    async def rollback(self):
+        await self.session.rollback()
+
+===== src/auth/service_layer/auth_service.py =====
+from src.auth.entrypoints.query_params import LoginInput
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.auth.service_layer.async_unit_of_work import UserUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.transaction import async_transactional
+from src.shared_kernel.config import settings
+from src.auth.entrypoints.query_params import Token
+from src.shared_kernel.exceptions import (
+    AuthenticationException,
+    InvalidCredentialsException,
+)
+
+JWT_EXP = settings.JWT_EXP
+JWT_SECRET = settings.JWT_SECRET
+JWT_ALG = settings.JWT_ALG
+
+
+class UserLogin(BaseUseCase[UserUnitOfWork]):
+    def __init__(self, uow: UserUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional()
+    async def user_login(self, query: LoginInput) -> Token:
+        try:
+            user = await self._uow.repository.find_by_username(username=query.username)
+            if user and user.verify_password(query.password):
+                user = await self._uow.repository.update_expiration_date(user)
+                self._uow.repository
+                return user.token
+            else:
+                raise InvalidCredentialsException()
+        except Exception:
+            raise AuthenticationException()
+
+===== src/auth/service_layer/command_handlers/__init__.py =====
+
+===== src/auth/service_layer/command_handlers/registeration.py =====
+from src.auth.domain.entities.user import User
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.auth.service_layer.async_unit_of_work import UserUnitOfWork
+from src.auth.domain.commands import RegisterUserCommand
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    Propagation,
+    async_transactional,
+)
+from fastapi import status, HTTPException
+from sqlalchemy.exc import IntegrityError
+
+
+class UserRegister(BaseUseCase[UserUnitOfWork]):
+    def __init__(self, uow: UserUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: RegisterUserCommand) -> User:
+        user = User.register_user(command)
+        user.set_password(command.password)
+        try:
+            user = await self.uow.repository.create(user)
+            return user
+        except IntegrityError as e:
+            # Log the full exception for debugging
+            import logging
+
+            logging.exception(
+                "IntegrityError during user registration"
+            )  # Or use your logger
+            if "user_email_key" in str(e):  # Check if the error is related to email
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email address already exists",
+                )
+            elif "user_username_key" in str(
+                e
+            ):  # Check if the error is related to username
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already exists",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="An error occurred during registration",
+                )  # Generic error
+
+===== src/auth/service_layer/current_user.py =====
+from jose import jwt, JWTError
+from fastapi import Request
+
+from src.auth.domain.entities.user import User
+from src.auth.service_layer.async_unit_of_work import UserUnitOfWork
+from src.shared_kernel.exceptions import (
+    AuthenticationException,
+    InvalidCredentialsException,
+    TokenExpired,
+    UserNotFound,
+)
+from src.shared_kernel.config import settings
+from src.container import engine
+from src.shared_kernel.service_layer.unit_of_work.transaction import async_transactional
+
+JWT_EXP = settings.JWT_EXP
+JWT_SECRET = settings.JWT_SECRET
+JWT_ALG = settings.JWT_ALG
+
+
+async def get_current_user(request: Request) -> User:
+    """
+    Attempts to get the current user using JWT token.
+    """
+    uow = UserUnitOfWork(engine)
+    async with uow:
+        token = request.headers.get("Authorization")
+        if not token:
+            raise AuthenticationException
+        token = token.replace("Bearer ", "")
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+            id = payload.get("id")
+            exp = payload.get("exp")
+            if id is None:
+                raise AuthenticationException
+        except JWTError:
+            raise AuthenticationException
+
+        user = await uow.repository.get_by_id(id)
+        if user.expiration_token_date.timestamp() != exp:
+            print(user.expiration_token_date)
+            print(exp)
+            raise TokenExpired
+        if not user:
+            raise UserNotFound
+        return user
+
+===== src/auth/service_layer/__init__.py =====
+
+===== src/book/adapters/data_models/book_data_model.py =====
+from sqlalchemy import Column, ForeignKey, String, Integer
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.associationproxy import association_proxy
+
+from src.shared_kernel.database.async_postgres_database import Base
+from src.shared_kernel.database.mixin import PrimaryKeyMixin, TimeStampMixin
+
+
+class BookAuthor(Base):
+    book_id = Column(ForeignKey("book.id"), primary_key=True)
+    author_id = Column(ForeignKey("author.user"), primary_key=True)
+    blurb = Column(String, nullable=False)
+    book = relationship("Book", back_populates="authors")
+    author = relationship("Author", back_populates="books")
+
+    author_name = association_proxy(target_collection="author", attr="name")
+    book_title = association_proxy(target_collection="book", attr="title")
+
+
+class Book(Base, PrimaryKeyMixin, TimeStampMixin):
+    title = Column(String(255), nullable=False)
+    isbn = Column(String(13), nullable=False, unique=True)
+    price = Column(Integer, nullable=False, default=0)
+    gener = Column(Integer, ForeignKey("gener.id"), nullable=False)
+    description = Column(String(2056), nullable=True)
+    unit = Column(Integer, default=0, nullable=False)
+
+    authors = relationship("BookAuthor", back_populates="book")
+
+===== src/book/adapters/data_models/book_mongo_schema.py =====
+from mongoengine import Document, StringField, IntField, DateTimeField, connect
+from mongoengine.fields import ObjectIdField
+
+class BookMongo(Document):
+    id = IntField(primary_key=True)
+    title = StringField(required=True)
+    isbn = StringField(required=True, unique=True)
+    description = StringField()
+    price = IntField()
+    gener = IntField()
+    unit = IntField()
+    created_at = DateTimeField()
+    updated_at = DateTimeField()
+
+    meta = {
+        'collection': 'books',
+        'indexes': [
+            {'fields': ['$title', '$description'], 'default_language': 'english'}
+        ]
+    }
+
+===== src/book/adapters/data_models/gener_data_model.py =====
+from sqlalchemy import Column, String
+
+from src.shared_kernel.database.async_postgres_database import Base
+from src.shared_kernel.database.mixin import PrimaryKeyMixin
+
+
+class Gener(Base, PrimaryKeyMixin):
+    name = Column(String, nullable=False)
+
+===== src/book/adapters/data_models/__init__.py =====
+from src.book.adapters.data_models.book_data_model import Book, BookAuthor
+from src.book.adapters.data_models.gener_data_model import Gener
+
+===== src/book/adapters/__init__.py =====
+
+===== src/book/adapters/mappers.py =====
+from abc import abstractmethod
+from src.book.adapters.data_models.book_data_model import Book as BookDB
+from src.book.domain.entities.book import Book as BookEntity
+from src.book.domain.entities.gener import Gener
+from src.shared_kernel.abstract_mapper import DataMapper
+
+
+class BookMapper(DataMapper):
+    @staticmethod
+    def model_to_entity(instance: BookDB) -> BookEntity:
+        return BookEntity(
+            id=instance.id,
+            title=instance.title,
+            isbn=instance.isbn,
+            price=instance.price,
+            gener=instance.gener,
+            description=instance.description,
+            unit=instance.unit,
+        )
+
+    @staticmethod
+    def entity_to_model(entity: BookEntity) -> BookDB:
+        return BookDB(
+            id=entity.id,
+            title=entity.title,
+            isbn=entity.isbn,
+            price=entity.price,
+            gener=entity.gener,
+            description=entity.description,
+            unit=entity.unit,
+        )
+
+
+class GenerMapper(DataMapper):
+    @staticmethod
+    def model_to_entity(instance: Gener) -> Gener:
+        return Gener(id=instance.id, name=instance.name)
+
+    @staticmethod
+    def entity_to_model(entity: Gener) -> Gener:
+        return Gener(id=entity.id, name=entity.name)
+
+===== src/book/adapters/repositories/async_book_mongo_repository.py =====
+from typing import List
+from bson import ObjectId
+from pymongo.collection import Collection
+from src.book.domain.entities.book import Book as BookEntity
+from src.shared_kernel.database.mongodb_engine import db
+
+class AsyncBookMongoRepository:
+    def __init__(self) -> None:
+        self.collection: Collection = db['books']
+
+    async def create(self, book_data: dict) -> dict:
+        result = self.collection.insert_one(book_data)
+        book_data['id'] = result.inserted_id
+        return book_data
+
+    async def search_books(self, query: str) -> List[BookEntity]:
+        cursor = self.collection.find({"$text": {"$search": query}})
+        data = list(cursor)
+        result = []
+        for book in data:
+            book.pop('_id')
+            result.append(BookEntity(**book))
+        return result
+
+===== src/book/adapters/repositories/async_book_repository.py =====
+from typing import List
+from sqlalchemy import ExceptionContext
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.book.adapters.mappers import BookMapper, GenerMapper
+from src.book.domain.entities.book import Book as BookEntity
+from src.book.adapters.data_models.book_data_model import Book as BookDB
+from src.shared_kernel.repository.async_abstract_repository import AsyncRepository
+from src.book.adapters.repositories.async_gener_repository import AsyncGenerRepository
+from src.shared_kernel.exceptions import (
+    GenerNotFound,
+    ISBNAlreadyExistsException,
+    BookNotFound,
+)
+
+
+class AsyncBookRepository(AsyncRepository[BookDB, int]):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self.gener = AsyncGenerRepository(session)
+
+    async def create(self, instance: BookEntity) -> BookEntity:
+        existing_book = await self.find_by_col(isbn=instance.isbn)
+        if existing_book:
+            raise ISBNAlreadyExistsException()
+
+        gener = await self.gener.get_by_id(instance.gener)
+        if not gener:
+            raise GenerNotFound()
+
+        book_model = BookMapper.entity_to_model(instance)
+        self.session.add(book_model)
+        await self.session.flush()
+        book = BookMapper.model_to_entity(instance=book_model)
+        return book
+
+    async def get_by_id(self, id: int) -> BookEntity:
+        book_model = await self.find_by_col(id=id)
+        if not book_model:
+            raise BookNotFound
+        gener = await self.gener.get_by_id(book_model.gener)
+        return BookMapper.model_to_entity(instance=book_model)
+
+    async def get_all_by_pagination(
+        self, page: int, per_page: int
+    ) -> tuple[List[BookEntity], int]:
+        books_model, count = await self.paginate(page=page, per_page=per_page)
+        books = []
+        for book in books_model:
+            gener = await self.gener.get_by_id(book.gener)
+            book_entity = BookMapper.model_to_entity(instance=book)
+            books.append(book_entity)
+        return books, count
+
+    async def update(self, id: int, book_data: dict) -> BookEntity:
+        book_model = await self.find_by_col(id=id)
+        if not book_model:
+            raise BookNotFound
+        if "isbn" in book_data and book_model.isbn != book_data["isbn"]:
+            print(book_data)
+            existing_book = await self.find_by_col(isbn=book_data["isbn"])
+            if existing_book:
+                raise ISBNAlreadyExistsException()
+        if "gener" in book_data and book_model.gener != book_data["gener"]:
+            gener = await self.gener.get_by_id(id=book_data["gener"])
+            if not gener:
+                raise GenerNotFound
+
+        for key, value in book_data.items():
+            setattr(book_model, key, value)
+
+        await self.session.flush()
+        gener = await self.gener.get_by_id(book_model.gener)
+        return BookMapper.model_to_entity(instance=book_model)
+
+    async def delete_by_id(self, id: int):
+        book_model = await self.find_by_col(id=id)
+        if not book_model:
+            raise BookNotFound
+        await self.delete(book_model)
+
+===== src/book/adapters/repositories/async_gener_repository.py =====
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.book.adapters.mappers import GenerMapper
+from src.book.domain.entities.gener import Gener as GenerEntity
+from src.book.adapters.data_models.gener_data_model import Gener as GenerDB
+from src.shared_kernel.exceptions import GenerNotFound
+from src.shared_kernel.repository.async_abstract_repository import AsyncRepository
+
+
+class AsyncGenerRepository(AsyncRepository[GenerDB, int]):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, id: int) -> GenerEntity:
+        gener = await self.find_by_col(id=id)
+        if not gener:
+            raise GenerNotFound
+        return GenerMapper.model_to_entity(gener)
+
+===== src/book/adapters/repositories/__init__.py =====
+
+===== src/book/domain/commands.py =====
+from pydantic import BaseModel
+from typing import Optional
+
+
+class CreateBookCommand(BaseModel):
+    title: str
+    isbn: str
+    price: Optional[int]
+    gener_id: int
+    description: Optional[str]
+    unit: int = 0
+
+
+class UpdateBookCommand(BaseModel):
+    title: Optional[str]
+    isbn: Optional[str]
+    price: Optional[int]
+    gener: Optional[int]
+    description: Optional[str]
+    unit: Optional[int]
+
+
+class DeleteBookCommand(BaseModel):
+    id: int
+
+===== src/book/domain/entities/book.py =====
+from dataclasses import dataclass
+from typing import Optional
+
+from src.book.domain.commands import CreateBookCommand
+from src.shared_kernel.domain.abstract_entity import Entity
+from src.book.domain.entities.gener import Gener
+
+
+@dataclass
+class Book(Entity):
+    id: Optional[int] = None
+    title: Optional[str] = None
+    isbn: Optional[str] = None
+    price: Optional[int] = 0
+    gener: Optional[int] = None
+    description: Optional[str] = None
+    unit: Optional[int] = 0
+
+    def decrease_stock_by_one(self) -> None:
+        if self.unit:
+            self.unit -= 1
+
+    def is_hvae_unit(self) -> bool:
+        if self.unit:
+            return self.unit > 0
+
+    def is_empty(self):
+        return self.unit <= 0
+
+    def create(command: CreateBookCommand) -> "Book":
+        book = Book(
+            title=command.title,
+            isbn=command.isbn,
+            price=command.price,
+            gener=command.gener_id,
+            description=command.description,
+            unit=command.unit,
+        )
+        return book
+
+===== src/book/domain/entities/gener.py =====
+from dataclasses import dataclass
+from typing import Optional
+
+from src.shared_kernel.domain.abstract_entity import Entity
+
+
+@dataclass
+class Gener(Entity):
+    id: Optional[int]
+    name: Optional[str]
+
+===== src/book/domain/entities/__init__.py =====
+
+===== src/book/domain/__init__.py =====
+
+===== src/book/domain/queries.py =====
+from pydantic import BaseModel
+
+
+class GetBookByIdQuery(BaseModel):
+    id: int
+
+
+class GetAllBooksQuery(BaseModel):
+    page: int = 0
+    per_page: int = 10
+
+===== src/book/entrypoints/__init__.py =====
+
+===== src/book/entrypoints/query_params.py =====
+
+===== src/book/entrypoints/request_models.py =====
+from typing import List
+from src.book.domain.commands import CreateBookCommand, UpdateBookCommand, DeleteBookCommand
+from src.book.domain.queries import GetBookByIdQuery, GetAllBooksQuery
+from src.book.service_layer.command_handlers.create_book import CreateBookHandler
+from src.book.service_layer.command_handlers.update_book import UpdateBookHandler
+from src.book.service_layer.command_handlers.delete_book import DeleteBookHandler
+from src.book.service_layer.query_handlers.get_book_by_id import GetBookByIdHandler
+from src.book.service_layer.query_handlers.get_all_books import GetAllBooksHandler
+from src.book.service_layer.book_service import BookService
+from src.book.domain.entities.book import Book
+from src.container import Container
+from fastapi import APIRouter, Depends, Query
+from dependency_injector.wiring import Provide, inject
+
+book_router = APIRouter(prefix="/books", tags=["Books"])
+
+@book_router.post("/", response_model=Book)
+@inject
+async def create_book(
+    command: CreateBookCommand,
+    uc: CreateBookHandler = Depends(Provide[Container.create_book_use_case]),
+):
+    book = await uc.execute(command)
+    await uc.uow.commit()
+    return book
+
+@book_router.get("/{book_id:int}", response_model=Book)
+@inject
+async def get_book_by_id(
+    book_id: int,
+    uc: GetBookByIdHandler = Depends(Provide[Container.get_book_by_id_use_case]),
+):
+    query = GetBookByIdQuery(id=book_id)
+    book = await uc.execute(query)
+    return book
+
+@book_router.get("/")
+@inject
+async def get_all_books(
+    page: int = 0,
+    page_per: int = 10,
+    uc: GetAllBooksHandler = Depends(Provide[Container.get_all_books_use_case]),
+):
+    query = GetAllBooksQuery(page=page, per_page=page_per)
+    books, count = await uc.execute(query)
+    return {"books": books, "count": count}
+
+@book_router.put("/{book_id:int}", response_model=Book)
+@inject
+async def update_book(
+    book_id: int,
+    command: UpdateBookCommand,
+    uc: UpdateBookHandler = Depends(Provide[Container.update_book_use_case]),
+):
+    book = await uc.execute(command, book_id)
+    return book
+
+@book_router.delete("/{book_id:int}")
+@inject
+async def delete_book(
+    book_id: int,
+    command: DeleteBookCommand,
+    uc: DeleteBookHandler = Depends(Provide[Container.delete_book_use_case]),
+):
+    command.id = book_id
+    await uc.execute(command)
+    return {"message": "Book deleted successfully"}
+
+@book_router.get("/search")
+@inject
+async def search_books(
+    query: str,
+    uc: BookService = Depends(Provide[Container.book_service_use_case]),
+):
+    books = await uc.search_books(query)
+    return {"books": books}
+
+===== src/book/enums.py =====
+
+===== src/book/__init__.py =====
+
+===== src/book/service_layer/async_unit_of_work.py =====
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from src.book.adapters.repositories.async_book_repository import AsyncBookRepository
+from src.shared_kernel.service_layer.unit_of_work.async_abstract_unit_of_work import (
+    AsyncSQLAlchemyUnitOfWork,
+)
+
+
+class BookUnitOfWork(AsyncSQLAlchemyUnitOfWork):
+    def __init__(self, engine: AsyncEngine) -> None:
+        AsyncSQLAlchemyUnitOfWork.__init__(self, engine)
+        self.repository = None
+
+    async def __aenter__(self) -> None:
+        await super().__aenter__()
+        self.repository = AsyncBookRepository(self.session)
+
+    async def commit(self):
+        await self.session.commit()
+
+    async def rollback(self):
+        await self.session.rollback()
+
+===== src/book/service_layer/book_service.py =====
+from typing import List
+from src.book.domain.entities.book import Book
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.book.adapters.repositories.async_book_mongo_repository import AsyncBookMongoRepository
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import BaseUseCase
+from src.shared_kernel.service_layer.unit_of_work.transaction import async_transactional
+
+class BookService(BaseUseCase[BookUnitOfWork]):
+    def __init__(self, uow: BookUnitOfWork) -> None:
+        self._uow = uow
+        self._mongo_repository = AsyncBookMongoRepository()
+
+    @async_transactional()
+    async def create(self, book_data: dict) -> Book:
+        # Create in PostgreSQL
+        book = Book(**book_data)
+        book = await self._uow.repository.create(book)
+        
+        # Sync to MongoDB
+        await self._mongo_repository.create(book.dict)
+        return book
+
+    async def search_books(self, query: str) -> List[Book]:
+        results = await self._mongo_repository.search_books(query)
+        return results
+
+===== src/book/service_layer/command_handlers/create_book.py =====
+from src.book.adapters.repositories.async_book_mongo_repository import AsyncBookMongoRepository
+from src.book.domain.entities.book import Book
+from src.book.domain.commands import CreateBookCommand
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+
+
+class CreateBookHandler(BaseUseCase[BookUnitOfWork]):
+    def __init__(self, uow: BookUnitOfWork) -> None:
+        self._uow = uow
+        self._mongo_repository = AsyncBookMongoRepository()
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: CreateBookCommand) -> Book:
+        book = Book.create(command)
+        book = await self._uow.repository.create(book)
+        # Sync to MongoDB
+        await self._mongo_repository.create(book.dict)
+        return book
+
+===== src/book/service_layer/command_handlers/delete_book.py =====
+from src.book.domain.commands import DeleteBookCommand
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+
+
+class DeleteBookHandler(BaseUseCase[BookUnitOfWork]):
+    def __init__(self, uow: BookUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: DeleteBookCommand):
+        await self._uow.repository.delete_by_id(command.id)
+
+===== src/book/service_layer/command_handlers/__init__.py =====
+
+===== src/book/service_layer/command_handlers/update_book.py =====
+from src.book.domain.entities.book import Book
+from src.book.domain.commands import UpdateBookCommand
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+from src.shared_kernel.exceptions import ISBNAlreadyExistsException
+
+
+class UpdateBookHandler(BaseUseCase[BookUnitOfWork]):
+    def __init__(self, uow: BookUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: UpdateBookCommand, book_id: int) -> Book:
+        book_data = command.dict(exclude_unset=True)
+        try:
+            book = await self._uow.repository.update(book_id, book_data)
+            return book
+        except ISBNAlreadyExistsException as e:
+            raise e
+
+===== src/book/service_layer/__init__.py =====
+
+===== src/book/service_layer/query_handlers/get_all_books.py =====
+from typing import List, Tuple
+
+from src.book.domain.entities.book import Book
+from src.book.domain.queries import GetAllBooksQuery
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+
+
+class GetAllBooksHandler(BaseUseCase[BookUnitOfWork]):
+    def __init__(self, uow: BookUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(read_only=True)
+    async def execute(self, query: GetAllBooksQuery) -> Tuple[List[Book], int]:
+        books, count = await self._uow.repository.get_all_by_pagination(
+            query.page, query.per_page
+        )
+        return books, count
+
+===== src/book/service_layer/query_handlers/get_book_by_id.py =====
+from src.book.domain.entities.book import Book
+from src.book.domain.queries import GetBookByIdQuery
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+
+
+class GetBookByIdHandler(BaseUseCase[BookUnitOfWork]):
+    def __init__(self, uow: BookUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(read_only=True)
+    async def execute(self, query: GetBookByIdQuery) -> Book:
+        book = await self._uow.repository.get_by_id(query.id)
+        if book is None:
+            raise NotFoundException(detail="Book not found")
+        return book
+
+===== src/celerybeat_schedule.py =====
+from celery.schedules import crontab
+from src.shared_kernel.celery_app import celery_app
+
+celery_app.conf.beat_schedule = {
+    'send-reminder-every-morning': {
+        'task': 'src.celery_tasks.send_reminder_task',
+        'schedule': crontab(minute=1),
+    },
+}
+from src.celery_tasks import send_reminder_task
+
+===== src/celery_tasks.py =====
+import logging
+from celery import shared_task
+from src.notification.message_service import MessageService
+from src.reservation.domain.aggregates.reservation import Reservation
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+@shared_task
+def send_reminder_task():
+    reminder_service = MessageService()
+    logger.info("Starting send_reminder_task")
+    # Logic to get the list of reservations ending the next day
+    reservations = get_tomorrow_ending_reservations()
+    for reservation in reservations:
+        message = "Your reservation will end in 1 day."
+        success = reminder_service.send_message("03", message)
+        if success:
+            logger.info(f"Reminder sent to {3}")
+        else:
+            logger.error(f"Failed to send reminder to {2}")
+
+def get_tomorrow_ending_reservations():
+    # Implement logic to fetch reservations ending tomorrow
+    reservations = [
+        Reservation(customer_id=1, book_id=101, start_time=datetime(2025, 2, 18), end_time=datetime.today(), customer=Customer(phone_number="+123456789"))
+    ]
+    return reservations
+
+===== src/container.py =====
+from sqlalchemy.ext.asyncio import create_async_engine
+from dependency_injector.containers import DeclarativeContainer
+from dependency_injector.providers import Factory
+from src.profiles.service_layer.async_unit_of_work import CustomerUnitOfWork
+from src.profiles.service_layer.command_handlers.customer_registeration import CustomerRegister
+from src.profiles.service_layer.customer_service import CustomerService
+from src.shared_kernel.config import settings
+from src.auth.service_layer.async_unit_of_work import UserUnitOfWork
+from src.auth.service_layer.command_handlers.registeration import UserRegister
+from src.auth.service_layer.auth_service import UserLogin
+from src.book.service_layer.async_unit_of_work import BookUnitOfWork
+from src.book.service_layer.book_service import BookService
+from src.book.service_layer.command_handlers.create_book import CreateBookHandler
+from src.book.service_layer.command_handlers.update_book import UpdateBookHandler
+from src.book.service_layer.command_handlers.delete_book import DeleteBookHandler
+from src.book.service_layer.query_handlers.get_book_by_id import GetBookByIdHandler
+from src.book.service_layer.query_handlers.get_all_books import GetAllBooksHandler
+from src.book.adapters.repositories.async_book_mongo_repository import AsyncBookMongoRepository
+from src.reservation.service_layer.async_unit_of_work import ReservationUnitOfWork
+from src.reservation.service_layer.command_handlers.create_reservation import CreateReservationHandler
+from src.reservation.service_layer.command_handlers.update_reservation import UpdateReservationHandler
+from src.reservation.service_layer.command_handlers.delete_reservation import DeleteReservationHandler
+from src.reservation.service_layer.query_handlers.get_reservation_by_id import GetReservationByIdHandler
+from src.reservation.service_layer.query_handlers.get_all_reservations import GetAllReservationsHandler
+
+engine = create_async_engine(settings.POSTGRES_URL)  # Create the engine *once*
+
+class Container(DeclarativeContainer):
+    engine = Factory(lambda: engine)
+
+    user_unit_of_work = Factory(UserUnitOfWork, engine=engine)
+    customer_unit_of_work = Factory(CustomerUnitOfWork, engine=engine)
+    book_unit_of_work = Factory(BookUnitOfWork, engine=engine)
+    reservation_unit_of_work = Factory(ReservationUnitOfWork, engine=engine)
+
+    user_register_use_case = Factory(UserRegister, uow=user_unit_of_work)
+    user_login_use_case = Factory(UserLogin, uow=user_unit_of_work)
+
+    customer_register_use_case = Factory(CustomerRegister, uow=customer_unit_of_work)
+    customer_service_use_case = Factory(CustomerService, uow=customer_unit_of_work)
+
+    book_service_use_case = Factory(BookService, uow=book_unit_of_work)
+    create_book_use_case = Factory(CreateBookHandler, uow=book_unit_of_work)
+    update_book_use_case = Factory(UpdateBookHandler, uow=book_unit_of_work)
+    delete_book_use_case = Factory(DeleteBookHandler, uow=book_unit_of_work)
+    get_book_by_id_use_case = Factory(GetBookByIdHandler, uow=book_unit_of_work)
+    get_all_books_use_case = Factory(GetAllBooksHandler, uow=book_unit_of_work)
+
+    create_reservation_use_case = Factory(CreateReservationHandler, uow=reservation_unit_of_work)
+    update_reservation_use_case = Factory(UpdateReservationHandler, uow=reservation_unit_of_work)
+    delete_reservation_use_case = Factory(DeleteReservationHandler, uow=reservation_unit_of_work)
+    get_reservation_by_id_use_case = Factory(GetReservationByIdHandler, uow=reservation_unit_of_work)
+    get_all_reservations_use_case = Factory(GetAllReservationsHandler, uow=reservation_unit_of_work)
+
+    book_mongo_repository = Factory(AsyncBookMongoRepository)
+
+===== src/__init__.py =====
+
+===== src/main.py =====
+from fastapi import FastAPI
+from src.auth.entrypoints import auth_router
+from src.profiles.entrypoints import customer_router
+from src.book.entrypoints.request_models import book_router
+from src.container import Container
+from src.auth.entrypoints import request_models as auth_request_models
+from src.profiles.entrypoints import customer_request_model as customer_request_model
+from src.book.entrypoints import request_models as book_request_model
+from src.reservation.entrypoints import reservation_router
+from src.reservation.entrypoints import request_models as reservation_request_models
+from src.shared_kernel.database.mongodb_engine import init_mongodb
+from src.notification.otp_service import OTPService
+
+app = FastAPI()
+
+init_mongodb()
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+otp_service = OTPService()
+
+class OTPRequest(BaseModel):
+    phone_number: str
+
+class OTPValidationRequest(BaseModel):
+    phone_number: str
+    otp: str
+
+@app.post("/send-otp")
+async def send_otp(request: OTPRequest):
+    if otp_service.send_otp(request.phone_number):
+        return {"message": "OTP sent successfully"}
+    raise HTTPException(status_code=500, detail="Failed to send OTP")
+
+@app.post("/validate-otp")
+async def validate_otp(request: OTPValidationRequest):
+    if otp_service.validate_otp(request.phone_number, request.otp):
+        return {"message": "OTP validated successfully"}
+    raise HTTPException(status_code=400, detail="Invalid OTP")
+
+container = Container()
+container.wire(
+    modules=[
+        auth_request_models,
+        customer_request_model,
+        book_request_model,
+        reservation_request_models,
+    ]
+)
+app.container = container
+
+app.include_router(auth_router)
+app.include_router(customer_router)
+app.include_router(book_router)
+app.include_router(reservation_router)
+
+===== src/notification/circuit_breaker.py =====
+class CircuitBreaker:
+    def __init__(self, providers):
+        self.providers = providers
+        self.failed_providers = set()
+
+    def send_message(self, phone_number: str, message: str) -> bool:
+        for provider in self.providers:
+            if provider in self.failed_providers:
+                continue
+            if provider.send_message(phone_number, message):
+                return True
+            else:
+                self.failed_providers.add(provider)
+        
+        # Reset failed providers after trying all
+        self.failed_providers.clear()
+        return False
+
+===== src/notification/__init__.py =====
+
+===== src/notification/message_interface.py =====
+from abc import ABC, abstractmethod
+
+class MessageServiceInterface(ABC):
+    @abstractmethod
+    def send_message(self, phone_number: str, message: str) -> bool:
+        pass
+
+===== src/notification/message_service.py =====
+from datetime import datetime, timedelta
+from src.notification.circuit_breaker import CircuitBreaker
+from src.shared_kernel.redis_cache import RedisCache
+from src.notification.sms_providers.kave_negari_provider import KaveNegariProvider
+from src.notification.sms_providers.signal_provider import SignalProvider
+from src.notification.sms_providers.sms_ir_provider import SMSIRProvider
+
+
+class MessageService:
+    def __init__(self):
+        self.cache = RedisCache()
+        self.providers = [
+            KaveNegariProvider(),
+            SignalProvider(),
+            SMSIRProvider()
+        ]
+        self.circuit_breaker = CircuitBreaker(self.providers)
+
+    def send_message(self, phone_number: str, message: str) -> bool:
+        if self.circuit_breaker.send_message(phone_number, message):
+            return True
+        return False
+
+===== src/notification/otp_service.py =====
+import random
+from datetime import datetime, timedelta
+from src.notification.circuit_breaker import CircuitBreaker
+from src.shared_kernel.redis_cache import RedisCache
+from src.notification.sms_providers.kave_negari_provider import KaveNegariProvider
+from src.notification.sms_providers.signal_provider import SignalProvider
+from src.notification.sms_providers.sms_ir_provider import SMSIRProvider
+
+
+class OTPService:
+    def __init__(self):
+        self.cache = RedisCache()
+        self.providers = [
+            KaveNegariProvider(),
+            SignalProvider(),
+            SMSIRProvider()
+        ]
+        self.circuit_breaker = CircuitBreaker(self.providers)
+
+    def generate_otp(self) -> str:
+        return str(random.randint(100000, 999999))
+
+    def send_otp(self, phone_number: str) -> bool:
+        if not self.check_rate_limit(phone_number):
+            return False
+
+        otp = self.generate_otp()
+        if self.circuit_breaker.send_message(phone_number, otp):
+            self.cache.set(phone_number, otp)
+            self.increment_rate_limit(phone_number)
+            return True
+        return False
+
+    def validate_otp(self, phone_number: str, otp: str) -> bool:
+        cached_otp = self.cache.get(phone_number)
+        if cached_otp and cached_otp == otp:
+            self.cache.delete(phone_number)
+            self.reset_rate_limit(phone_number)
+            return True
+        return False
+
+    def check_rate_limit(self, phone_number: str) -> bool:
+        short_term_limit = self.cache.get(f"{phone_number}_short_term")
+        long_term_limit = self.cache.get(f"{phone_number}_long_term")
+
+        short_term_limit = int(short_term_limit) if short_term_limit else 0
+        long_term_limit = int(long_term_limit) if long_term_limit else 0
+
+        if short_term_limit >= 5 or long_term_limit >= 10:
+            return False
+        return True
+
+    def increment_rate_limit(self, phone_number: str):
+        short_term_key = f"{phone_number}_short_term"
+        long_term_key = f"{phone_number}_long_term"
+
+        self.cache.incr(short_term_key)
+        self.cache.incr(long_term_key)
+
+        self.cache.expire(short_term_key, 120)  # 2 minutes
+        self.cache.expire(long_term_key, 3600)  # 1 hour
+
+    def reset_rate_limit(self, phone_number: str):
+        self.cache.delete(f"{phone_number}_short_term")
+        self.cache.delete(f"{phone_number}_long_term")
+
+
+===== src/notification/sms_providers/__init__.py =====
+
+===== src/notification/sms_providers/kave_negari_provider.py =====
+from src.notification.message_interface import MessageServiceInterface
+import random
+
+class KaveNegariProvider(MessageServiceInterface):
+    def send_message(self, phone_number: str, message: str) -> bool:
+        # Implement the sending logic for Kave Negar
+        if random.randint(0, 1) == 0:
+            return False
+        print(f"Sending message {message} to {phone_number} via Kave Negar")
+        return True
+
+===== src/notification/sms_providers/signal_provider.py =====
+from src.notification.message_interface import MessageServiceInterface
+import random
+
+class SignalProvider(MessageServiceInterface):
+    def send_message(self, phone_number: str, message: str) -> bool:
+        # Implement the sending logic for Signal
+        if random.randint(0, 1) == 0:
+            return False
+        print(f"Sending message {message} to {phone_number} via Signal")
+        return True
+
+===== src/notification/sms_providers/sms_ir_provider.py =====
+from src.notification.message_interface import MessageServiceInterface
+import random
+
+class SMSIRProvider(MessageServiceInterface):
+    def send_message(self, phone_number: str, message: str) -> bool:
+        # Implement the sending logic for SMS.ir
+        if random.randint(0, 1) == 0:
+            return False
+        print(f"Sending message {message} to {phone_number} via SMS.ir")
+        return True
+
+===== src/profiles/adapters/data_models/author_data_model.py =====
+from sqlalchemy import Column, Integer, ForeignKey, String
+from sqlalchemy.orm import relationship
+
+from src.shared_kernel.database.async_postgres_database import Base
+
+
+class Author(Base):
+    user = Column(Integer, ForeignKey("user.id"), primary_key=True, nullable=False)
+    city = Column(Integer, ForeignKey("city.id"))
+    bank_number = Column(String(16), nullable=True)
+    books = relationship("BookAuthor", back_populates="author")
+
+===== src/profiles/adapters/data_models/city_data_model.py =====
+from sqlalchemy import Column, String
+
+from src.shared_kernel.database.async_postgres_database import Base
+from src.shared_kernel.database.mixin import PrimaryKeyMixin
+
+
+class City(Base, PrimaryKeyMixin):
+    name = Column(String(255), nullable=False)
+
+===== src/profiles/adapters/data_models/customer_data_model.py =====
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, Enum
+
+from src.profiles.enums import SubscriptionModel
+from src.shared_kernel.database.async_postgres_database import Base
+
+
+class Customer(Base):
+    user = Column(Integer, ForeignKey("user.id"), primary_key=True, nullable=False)
+    subscription_model = Column(
+        Enum(SubscriptionModel), default=SubscriptionModel.FREE, nullable=False
+    )
+    subscription_end = Column(DateTime, nullable=True)
+    wallet_money = Column(Integer, default=0, nullable=False)
+
+===== src/profiles/adapters/data_models/__init__.py =====
+from src.profiles.adapters.data_models.customer_data_model import Customer
+from src.profiles.adapters.data_models.author_data_model import Author
+from src.profiles.adapters.data_models.city_data_model import City
+
+===== src/profiles/adapters/__init__.py =====
+
+===== src/profiles/adapters/mapper.py =====
+from src.auth.domain import entities
+from src.auth.domain.entities.user import User
+from src.shared_kernel.abstract_mapper import DataMapper
+from src.profiles.domain.entities.customer import Customer as CustomerEntity
+from src.profiles.adapters.data_models.customer_data_model import Customer as CustomerDB
+
+
+class CustomerMapper(DataMapper[CustomerEntity, CustomerDB]):
+    @staticmethod
+    def model_to_entity(instance: CustomerDB, user: User) -> CustomerEntity:
+        return CustomerEntity(
+            user=user,
+            subscription_model=instance.subscription_model,
+            subscription_end=instance.subscription_end,
+            wallet_money=instance.wallet_money,
+        )
+
+    @staticmethod
+    def entity_to_model(entity: CustomerEntity) -> CustomerDB:
+        return CustomerDB(
+            user=entity.user.id,
+            subscription_model=entity.subscription_model,
+            subscription_end=entity.subscription_end,
+            wallet_money=entity.wallet_money,
+        )
+
+===== src/profiles/adapters/repositories/async_customer_repository.py =====
+from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+from src.profiles.adapters.mapper import CustomerMapper
+from src.shared_kernel.exceptions import CustomerNotFound, UserNotFound
+from src.shared_kernel.repository.async_abstract_repository import AsyncRepository
+from src.profiles.adapters.data_models.customer_data_model import Customer as CustomerDB
+from src.profiles.domain.entities.customer import Customer as CustomerEntity
+from src.auth.adapters.repositories.async_user_repository import AsyncUserRepository
+
+
+class AsyncCustomerRepository(AsyncRepository[CustomerDB, int]):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self.user_repository = AsyncUserRepository(session)
+
+    async def create(self, customer: CustomerEntity) -> CustomerEntity:
+        user = await self.user_repository.get_by_id(customer.user.id)
+        if not user:
+            raise UserNotFound
+        customer.user = user
+        customer_model = CustomerMapper.entity_to_model(customer)
+        self.session.add(customer_model)
+        await self.session.flush()
+        return CustomerMapper.model_to_entity(customer_model, user)
+
+    async def get_by_id(self, id: int) -> CustomerEntity:
+        customer_model = await self.find_by_col(user=id)
+        user = await self.user_repository.get_by_id(id)
+        return CustomerMapper.model_to_entity(customer_model, user)
+
+    async def get_all_by_pagination(
+        self, page: int, per_page: int
+    ) -> tuple[List[CustomerEntity], int]:
+        customers_model, count = await self.paginate(page=page, per_page=per_page)
+        customers = []
+        for customer in customers_model:
+            user = await self.user_repository.get_by_id(customer.user)
+            customer = CustomerMapper.model_to_entity(customer, user)
+            customers.append(customer)
+        return customers, count
+
+    async def delete_by_id(self, id: int):
+        customer = await self.find_by_col(user=id)
+        if not customer:
+            raise CustomerNotFound
+        await self.delete(customer)
+
+    async def update(self, id: int, customer_data: dict) -> CustomerEntity:
+        customer = await self.find_by_col(user=id)
+        user = await self.user_repository.get_by_id(id=id)
+        if not customer:
+            raise CustomerNotFound
+        user_dict = customer_data["user"]
+        if user_dict:
+            # TODO add user update
+            print("update user")
+            customer_data.pop("user")
+
+        for key, value in customer_data.items():
+            setattr(customer, key, value)
+        await self.session.flush()
+        return CustomerMapper.model_to_entity(customer, user)
+
+===== src/profiles/adapters/repositories/__init__.py =====
+
+===== src/profiles/domain/commands.py =====
+from pydantic import BaseModel
+
+from src.auth.domain.commands import RegisterUserCommand
+
+
+class CustomerBaseModel(BaseModel): ...
+
+
+class RegisterCustomerCommand(CustomerBaseModel):
+    user: RegisterUserCommand
+
+===== src/profiles/domain/entities/author.py =====
+from dataclasses import dataclass
+from datetime import datetime
+
+from src.shared_kernel.domain.abstract_entity import Entity
+from src.auth.domain.entities.user import User
+from src.profiles.domain.entities.city import City
+
+
+@dataclass
+class Author(Entity):
+    user: User
+    city: City
+    bank_number: str
+
+===== src/profiles/domain/entities/city.py =====
+from dataclasses import dataclass
+from datetime import datetime
+
+from src.shared_kernel.domain.abstract_entity import Entity
+
+
+@dataclass
+class City(Entity):
+    id: int
+    name: str
+
+===== src/profiles/domain/entities/customer.py =====
+from dataclasses import dataclass
+from typing import Optional
+from datetime import datetime
+
+from src.profiles.domain.commands import RegisterCustomerCommand
+from src.profiles.enums import SubscriptionModel
+from src.shared_kernel.domain.abstract_entity import Entity
+from src.auth.domain.entities.user import User
+
+
+@dataclass
+class Customer(Entity):
+    user: User
+    subscription_model: SubscriptionModel = SubscriptionModel.FREE
+    subscription_end: Optional[datetime] = None
+    wallet_money: int = 0
+
+    def pay_money(self, money: int) -> None:
+        self.wallet_money -= money
+
+    @staticmethod
+    def register_customer(command: RegisterCustomerCommand) -> "Customer":
+        return Customer(**command.dict())
+
+===== src/profiles/domain/entities/__init__.py =====
+
+===== src/profiles/domain/__init__.py =====
+
+===== src/profiles/entrypoints/customer_request_model.py =====
+from dependency_injector.wiring import Provide, inject
+from fastapi import Depends, Response, status
+
+from src.container import Container
+from src.profiles.domain.commands import RegisterCustomerCommand
+from src.profiles.entrypoints import customer_router
+from src.profiles.entrypoints.query_parmas import CustomerRead
+from src.profiles.service_layer.command_handlers.customer_registeration import (
+    CustomerRegister,
+)
+from src.profiles.service_layer.customer_service import CustomerService
+
+
+@customer_router.post("/register", response_model=CustomerRead)
+@inject
+async def register_user(
+    command: RegisterCustomerCommand,
+    uc: CustomerRegister = Depends(Provide[Container.customer_register_use_case]),
+):
+    user = await uc.register(command)
+    return user
+
+
+@customer_router.get("/{customer_id}", response_model=CustomerRead)
+@inject
+async def get_customer_by_id(
+    customer_id: int,
+    uc: CustomerService = Depends(Provide[Container.customer_service_use_case]),
+):
+    customer = await uc.get_by_id(customer_id)
+    return customer
+
+
+@customer_router.get("/")
+@inject
+async def get_all_customers(
+    page: int = 0,
+    page_per: int = 10,
+    uc: CustomerService = Depends(Provide[Container.customer_service_use_case]),
+):
+    customers, count = await uc.get_all_by_pagination(page, page_per)
+    return customers, count
+
+
+@customer_router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def delete_customer(
+    customer_id: int,
+    uc: CustomerService = Depends(Provide[Container.customer_service_use_case]),
+):
+    await uc.delete(customer_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+===== src/profiles/entrypoints/__init__.py =====
+from fastapi import APIRouter
+
+customer_router = APIRouter(prefix="/customer", tags=["Customers"])
+
+===== src/profiles/entrypoints/query_parmas.py =====
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from datetime import datetime
+from fastapi import status
+
+from src.auth.entrypoints.query_params import UserRead
+from src.profiles.enums import SubscriptionModel
+from src.shared_kernel.entrypoints.mixin import PaginationMixin
+
+
+class CustomerBaseQuery(BaseModel):
+    user: UserRead
+
+
+class CustomerRead(CustomerBaseQuery):
+    subscription_model: Optional[SubscriptionModel] = SubscriptionModel.FREE
+    subscription_end: Optional[datetime] = None
+    wallet_money: Optional[int] = Field(ge=0)
+
+
+class CustomerReadAll(BaseModel, PaginationMixin):
+    customers: List[CustomerRead]
+
+===== src/profiles/enums.py =====
+from src.shared_kernel.abstract_enum import BaseEnum
+
+
+class SubscriptionModel(BaseEnum):
+    FREE = "free"
+    PLUS = "plus"
+    PREMIUM = "premium"
+
+===== src/profiles/__init__.py =====
+
+===== src/profiles/service_layer/async_unit_of_work.py =====
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from src.profiles.adapters.repositories.async_customer_repository import (
+    AsyncCustomerRepository,
+)
+from src.shared_kernel.service_layer.unit_of_work.async_abstract_unit_of_work import (
+    AsyncSQLAlchemyUnitOfWork,
+)
+
+
+class CustomerUnitOfWork(AsyncSQLAlchemyUnitOfWork):
+    def __init__(self, engine: AsyncEngine) -> None:
+        AsyncSQLAlchemyUnitOfWork.__init__(self, engine)
+        self.repository = None
+
+    async def __aenter__(self) -> None:
+        await super().__aenter__()
+        self.repository = AsyncCustomerRepository(self.session)
+
+    async def commit(self):
+        await self.session.commit()
+
+    async def rollback(self):
+        await self.session.rollback()
+
+===== src/profiles/service_layer/command_handlers/customer_registeration.py =====
+from src.auth.service_layer.async_unit_of_work import UserUnitOfWork
+from src.auth.service_layer.command_handlers.registeration import UserRegister
+from src.profiles.domain.commands import RegisterCustomerCommand
+from src.profiles.domain.entities.customer import Customer
+from src.profiles.service_layer.async_unit_of_work import CustomerUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    Propagation,
+    async_transactional,
+)
+
+
+class CustomerRegister(BaseUseCase[CustomerUnitOfWork]):
+    def __init__(self, uow: CustomerUnitOfWork) -> None:
+        self._uow = uow
+        self.user_register = UserRegister(UserUnitOfWork(uow.engine))
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def register(self, command: RegisterCustomerCommand) -> Customer:
+        user = await self.user_register.execute(command.user)
+        customer = Customer(user)
+        try:
+            customer = await self._uow.repository.create(customer)
+            return customer
+        except Exception as e:
+            raise e
+
+===== src/profiles/service_layer/command_handlers/__init__.py =====
+
+===== src/profiles/service_layer/customer_service.py =====
+from ast import Tuple
+from typing import List, Tuple
+
+from src.auth.service_layer.async_unit_of_work import UserUnitOfWork
+from src.auth.service_layer.command_handlers.registeration import UserRegister
+from src.profiles.domain.entities import customer
+from src.profiles.domain.entities.customer import Customer
+from src.profiles.service_layer.async_unit_of_work import CustomerUnitOfWork
+from src.shared_kernel.exceptions import CustomerNotFound
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    Propagation,
+    async_transactional,
+)
+
+
+class CustomerService(BaseUseCase[CustomerUnitOfWork]):
+    def __init__(self, uow: CustomerUnitOfWork) -> None:
+        self._uow = uow
+        self.user_register = UserRegister(UserUnitOfWork(uow.engine))
+
+    @async_transactional(read_only=True)
+    async def get_by_id(self, customer_id: int) -> Customer:
+        customer = await self._uow.repository.get_by_id(id=customer_id)
+        if customer is None:
+            raise CustomerNotFound
+        return customer
+
+    @async_transactional(read_only=True)
+    async def get_all_by_pagination(
+        self, page: int, per_page: int
+    ) -> Tuple[List[Customer], int]:
+        customers, count = await self._uow.repository.get_all_by_pagination(
+            page=page, per_page=per_page
+        )
+        return customers, count
+
+    @async_transactional()
+    async def delete(self, customer_id: int):
+        try:
+            await self._uow.repository.delete_by_id(customer_id)
+        except Exception as e:
+            raise e
+
+===== src/profiles/service_layer/__init__.py =====
+
+===== src/reservation/adapters/data_models/__init__.py =====
+from src.reservation.adapters.data_models.reservation_data_model import Reservation
+
+===== src/reservation/adapters/data_models/reservation_data_model.py =====
+from sqlalchemy import Column, ForeignKey, Integer, DateTime, Boolean
+
+from src.shared_kernel.database.async_postgres_database import Base
+from src.shared_kernel.database.mixin import (
+    PrimaryKeyMixin,
+    TimeStampMixin,
+    SoftDeleteMixin,
+)
+
+
+class Reservation(Base, PrimaryKeyMixin, TimeStampMixin, SoftDeleteMixin):
+    customer_id = Column(Integer, ForeignKey("customer.user"), nullable=False)
+    book_id = Column(Integer, ForeignKey("book.id"), nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=True)
+    is_scheduled = Column(Boolean, nullable=False, default=False)
+    is_instant = Column(Boolean, nullable=False, default=False)
+    price = Column(Integer, nullable=False)
+
+===== src/reservation/adapters/__init__.py =====
+
+===== src/reservation/adapters/mapper.py =====
+from src.reservation.adapters.data_models.reservation_data_model import (
+    Reservation as ReservationDB,
+)
+from src.reservation.domain.aggregates.reservation import (
+    Reservation as ReservationEntity,
+)
+from src.shared_kernel.abstract_mapper import DataMapper
+
+
+class ReservationMapper(DataMapper):
+    @staticmethod
+    def model_to_entity(instance: ReservationDB) -> ReservationEntity:
+        return ReservationEntity(
+            id=instance.id,
+            book_id=instance.book_id,
+            customer_id=instance.customer_id,
+            start_time=instance.start_time,
+            end_time=instance.end_time,
+            is_scheduled=instance.is_scheduled,
+            is_instant=instance.is_instant,
+            price=instance.price,
+        )
+
+    @staticmethod
+    def entity_to_model(entity: ReservationEntity) -> ReservationDB:
+        return ReservationDB(
+            id=entity.id,
+            book_id=entity.book_id,
+            customer_id=entity.customer_id,
+            start_time=entity.start_time,
+            end_time=entity.end_time,
+            is_scheduled=entity.is_scheduled,
+            is_instant=entity.is_instant,
+            price=entity.price,
+        )
+
+===== src/reservation/adapters/repositories/async_reservation_repository.py =====
+from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.book.adapters.repositories.async_book_repository import AsyncBookRepository
+from src.profiles.adapters.repositories.async_customer_repository import AsyncCustomerRepository
+from src.reservation.adapters.mapper import ReservationMapper
+from src.reservation.domain.aggregates import reservation
+from src.reservation.domain.aggregates.reservation import (
+    Reservation as ReservationEntity,
+)
+from src.reservation.adapters.data_models.reservation_data_model import (
+    Reservation as ReservationDB,
+)
+from src.shared_kernel.repository.async_abstract_repository import AsyncRepository
+from src.shared_kernel.exceptions import NotFoundException
+
+
+class AsyncReservationRepository(AsyncRepository[ReservationDB, int]):
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self.book_repo = AsyncBookRepository(session)
+        self.customer_repo = AsyncCustomerRepository(session)
+
+        
+    async def create(self, instance: ReservationEntity) -> ReservationEntity:
+        reservation_model = ReservationMapper.entity_to_model(instance)
+        self.session.add(reservation_model)
+        await self.session.flush()
+        return ReservationMapper.model_to_entity(reservation_model)
+
+    async def get_by_id(self, id: int) -> ReservationEntity:
+        reservation_model = await self.find_by_col(id=id)
+        if not reservation_model:
+            raise NotFoundException(detail="Reservation not found")
+        return ReservationMapper.model_to_entity(reservation_model)
+
+    async def get_all_by_pagination(
+        self, page: int, per_page: int
+    ) -> tuple[List[ReservationEntity], int]:
+        reservations_model, count = await self.paginate(page=page, per_page=per_page)
+        reservations = [
+            ReservationMapper.model_to_entity(reservation)
+            for reservation in reservations_model
+        ]
+        return reservations, count
+
+    async def update(self, id: int, reservation_data) -> ReservationEntity:
+        reservation_model = await self.find_by_col(id=id)
+        if not reservation_model:
+            raise NotFoundException(detail="Reservation not found")
+        if (
+            "book_id" in reservation_data
+            and reservation_model.book_id != reservation_data["book_id"]
+        ):
+            book = await self.book_repo.find_by_col(id=reservation_data["book_id"])
+            reservation_model.book_id = book.id
+        if ("customer_id" in reservation_data) and (
+            reservation_model.customer_id != reservation_data["customer_id"]
+        ):
+            customer = await self.customer_repo.find_by_col(
+                id=reservation_data["customer_id"]
+            )
+            reservation_model.customer_id = customer.id
+
+        for key, value in reservation_data.items():
+            setattr(reservation_model, key, value)
+
+        await self.session.flush()
+        return ReservationMapper.model_to_entity(reservation_model)
+
+    async def delete(self, instance: ReservationEntity):
+        reservation_model = await self.find_by_col(id=instance.id)
+        if not reservation_model:
+            raise NotFoundException(detail="Reservation not found")
+        reservation_model.is_deleted = True
+
+===== src/reservation/adapters/repositories/__init__.py =====
+
+===== src/reservation/domain/aggregates/__init__.py =====
+
+===== src/reservation/domain/aggregates/reservation.py =====
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+
+from src.shared_kernel.domain.abstract_entity import Entity
+
+
+@dataclass
+class Reservation(Entity):
+    id: Optional[int] = None
+    book_id: int = None
+    customer_id: int = None
+    start_time: datetime = None
+    end_time: Optional[datetime] = None
+    is_scheduled: bool = False
+    is_instant: bool = False
+    price: int = 0
+
+    @staticmethod
+    def schedule_reservation(customer_id: int, book_id: int) -> "Reservation":
+        reservation = Reservation(customer_id=customer_id, book_id=book_id)
+        reservation._schedule_reservation(customer_id, book_id)
+        return reservation
+
+    @staticmethod
+    def instant_reservation(customer_id: int, book_id: int) -> "Reservation":
+        reservation = Reservation(customer_id=customer_id, book_id=book_id)
+        reservation._instant_reservation(customer_id, book_id)
+        return reservation
+
+    def _schedule_reservation(self, customer_id: int, book_id: int):
+        self.customer_id = customer_id
+        self.book_id = book_id
+        self.is_scheduled = True
+
+    def _instant_reservation(self, customer_id: int, book_id: int):
+        self.customer_id = customer_id
+        self.book_id = book_id
+        self.is_instant = True
+        self.start_time = datetime.now()
+
+===== src/reservation/domain/commands.py =====
+from typing import Optional
+from pydantic import BaseModel
+
+
+class CreateReservationCommand(BaseModel):
+    customer_id: int
+    book_id: int
+    is_instant: bool
+    price: int
+
+
+class UpdateReservationCommand(BaseModel):
+    reservation_id: int
+    customer_id: Optional[int]
+    book_id: Optional[int]
+    is_instant: Optional[bool]
+    price: Optional[int]
+
+
+class DeleteReservationCommand(BaseModel):
+    reservation_id: int
+
+===== src/reservation/domain/entities/__init__.py =====
+
+===== src/reservation/domain/envents/__init__.py =====
+
+===== src/reservation/domain/envents/reminder_event.py =====
+class ReminderEvent:
+    def __init__(self, customer_id: int, phone_number: str, message: str):
+        self.customer_id = customer_id
+        self.phone_number = phone_number
+        self.message = message
+
+===== src/reservation/domain/__init__.py =====
+
+===== src/reservation/domain/queries.py =====
+from pydantic import BaseModel
+
+
+class GetReservationByIdQuery(BaseModel):
+    reservation_id: int
+
+
+class GetAllReservationsQuery(BaseModel):
+    page: int = 0
+    per_page: int = 10
+
+===== src/reservation/entrypoints/__init__.py =====
+from fastapi import APIRouter
+
+reservation_router = APIRouter(prefix="/reservations", tags=["Reservations"])
+
+===== src/reservation/entrypoints/request_models.py =====
+from typing import List
+from src.reservation.domain.commands import (
+    CreateReservationCommand,
+    UpdateReservationCommand,
+    DeleteReservationCommand,
+)
+from src.reservation.domain.queries import (
+    GetReservationByIdQuery,
+    GetAllReservationsQuery,
+)
+from src.reservation.service_layer.command_handlers.create_reservation import (
+    CreateReservationHandler,
+)
+from src.reservation.service_layer.command_handlers.update_reservation import (
+    UpdateReservationHandler,
+)
+from src.reservation.service_layer.command_handlers.delete_reservation import (
+    DeleteReservationHandler,
+)
+from src.reservation.service_layer.query_handlers.get_reservation_by_id import (
+    GetReservationByIdHandler,
+)
+from src.reservation.service_layer.query_handlers.get_all_reservations import (
+    GetAllReservationsHandler,
+)
+from src.reservation.domain.aggregates.reservation import Reservation
+from src.container import Container
+
+from fastapi import APIRouter, Depends, Request
+from src.reservation.entrypoints import reservation_router
+from dependency_injector.wiring import Provide, inject
+
+
+@reservation_router.post("/", response_model=Reservation)
+@inject
+async def create_reservation(
+    command: CreateReservationCommand,
+    uc: CreateReservationHandler = Depends(
+        Provide[Container.create_reservation_use_case]
+    ),
+):
+    reservation = await uc.execute(command)
+    await uc.uow.commit()
+    return reservation
+
+
+@reservation_router.get("/{reservation_id}", response_model=Reservation)
+@inject
+async def get_reservation_by_id(
+    reservation_id: int,
+    uc: GetReservationByIdHandler = Depends(
+        Provide[Container.get_reservation_by_id_use_case]
+    ),
+):
+    query = GetReservationByIdQuery(reservation_id=reservation_id)
+    reservation = await uc.execute(query)
+    return reservation
+
+
+@reservation_router.get("/")
+@inject
+async def get_all_reservations(
+    page: int = 0,
+    page_per: int = 10,
+    uc: GetAllReservationsHandler = Depends(
+        Provide[Container.get_all_reservations_use_case]
+    ),
+):
+    query = GetAllReservationsQuery(page=page, per_page=page_per)
+    reservations, count = await uc.execute(query)
+    return {"reservations": reservations, "count": count}
+
+
+@reservation_router.put("/{reservation_id}", response_model=Reservation)
+@inject
+async def update_reservation(
+    reservation_id: int,
+    command: UpdateReservationCommand,
+    uc: UpdateReservationHandler = Depends(
+        Provide[Container.update_reservation_use_case]
+    ),
+):
+    reservation = await uc.execute(command, reservation_id)
+    return reservation
+
+
+@reservation_router.delete("/{reservation_id}")
+@inject
+async def delete_reservation(
+    reservation_id: int,
+    command: DeleteReservationCommand,
+    uc: DeleteReservationHandler = Depends(
+        Provide[Container.delete_reservation_use_case]
+    ),
+):
+    command.reservation_id = reservation_id
+    await uc.execute(command)
+    return {"message": "Reservation deleted successfully"}
+
+===== src/reservation/handlers/__init__.py =====
+
+===== src/reservation/handlers/reminder_event_handler.py =====
+from src.notification.message_service import MessageService
+from src.reservation.domain.envents.reminder_event import ReminderEvent
+
+class ReminderEventHandler:
+    def __init__(self, message_service: MessageService):
+        self.message_service = message_service
+        
+    def handle(self, event: ReminderEvent):
+        self.message_service.send_message(event.phone_number, event.message)
+
+
+===== src/reservation/__init__.py =====
+
+===== src/reservation/service_layer/async_unit_of_work.py =====
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from src.reservation.adapters.repositories.async_reservation_repository import (
+    AsyncReservationRepository,
+)
+from src.shared_kernel.service_layer.unit_of_work.async_abstract_unit_of_work import (
+    AsyncSQLAlchemyUnitOfWork,
+)
+from src.profiles.adapters.repositories.async_customer_repository import (
+    AsyncCustomerRepository,
+)
+from src.book.adapters.repositories.async_book_repository import AsyncBookRepository
+
+
+class ReservationUnitOfWork(AsyncSQLAlchemyUnitOfWork):
+    def __init__(self, engine: AsyncEngine) -> None:
+        AsyncSQLAlchemyUnitOfWork.__init__(self, engine)
+        self.repository = None
+        self.customer_repository = None
+        self.book_repository = None
+
+    async def __aenter__(self) -> None:
+        await super().__aenter__()
+        self.repository = AsyncReservationRepository(self.session)
+        self.customer_repository = AsyncCustomerRepository(self.session)
+        self.book_repository = AsyncBookRepository(self.session)
+
+    async def commit(self):
+        await self.session.commit()
+
+    async def rollback(self):
+        await self.session.rollback()
+
+===== src/reservation/service_layer/command_handlers/create_reservation.py =====
+from src.reservation.domain.aggregates.reservation import Reservation
+from src.reservation.domain.commands import CreateReservationCommand
+from src.reservation.service_layer.async_unit_of_work import ReservationUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+from src.shared_kernel.exceptions import NotFoundException, InsufficientFundsException
+
+
+class CreateReservationHandler(BaseUseCase[ReservationUnitOfWork]):
+    def __init__(self, uow: ReservationUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: CreateReservationCommand) -> Reservation:
+        customer = await self._uow.customer_repository.get_by_id(command.customer_id)
+        if not customer:
+            raise NotFoundException(detail="Customer not found")
+
+        book = await self._uow.book_repository.get_by_id(command.book_id)
+        if not book:
+            raise NotFoundException(detail="Book not found")
+
+        if command.is_instant:
+            if book.is_empty():
+                raise InsufficientFundsException(
+                    detail="Not enough units available for instant reservation"
+                )
+            if customer.wallet_money < command.price:
+                raise InsufficientFundsException(detail="Insufficient funds")
+
+            book.decrease_stock_by_one()
+            customer.pay_money(command.price)
+            reservation = Reservation.instant_reservation(
+                customer_id=customer.user.id, book_id=book.id
+            )
+        else:
+            reservation = Reservation.schedule_reservation(
+                customer_id=customer.user.id, book_id=book.id
+            )
+
+        reservation = await self._uow.repository.create(reservation)
+        book = await self._uow.book_repository.update(command.book_id, book.dict)
+        customer = await self._uow.customer_repository.update(
+            command.customer_id, customer.dict
+        )
+        await self._uow.commit()
+        return reservation
+
+===== src/reservation/service_layer/command_handlers/delete_reservation.py =====
+from src.reservation.domain.commands import DeleteReservationCommand
+from src.reservation.service_layer.async_unit_of_work import ReservationUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+from src.shared_kernel.exceptions import NotFoundException
+
+
+class DeleteReservationHandler(BaseUseCase[ReservationUnitOfWork]):
+    def __init__(self, uow: ReservationUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: DeleteReservationCommand):
+        reservation = await self._uow.repository.get_by_id(command.reservation_id)
+        if not reservation:
+            raise NotFoundException(detail="Reservation not found")
+
+        await self._uow.repository.delete(reservation)
+        await self._uow.commit()
+
+===== src/reservation/service_layer/command_handlers/__init__.py =====
+
+===== src/reservation/service_layer/command_handlers/update_reservation.py =====
+from src.reservation.domain.aggregates.reservation import Reservation
+from src.reservation.domain.commands import UpdateReservationCommand
+from src.reservation.service_layer.async_unit_of_work import ReservationUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+from src.shared_kernel.exceptions import NotFoundException, InsufficientFundsException
+
+
+class UpdateReservationHandler(BaseUseCase[ReservationUnitOfWork]):
+    def __init__(self, uow: ReservationUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(propagation=Propagation.REQUIRED)
+    async def execute(self, command: UpdateReservationCommand) -> Reservation:
+        reservation = await self._uow.repository.get_by_id(command.reservation_id)
+        if not reservation:
+            raise NotFoundException(detail="Reservation not found")
+
+        if command.customer_id:
+            customer = await self._uow.repository.customer_repo.get_by_id(
+                command.customer_id
+            )
+            if not customer:
+                raise NotFoundException(detail="Customer not found")
+            reservation.customer_id = customer.user.id
+
+        if command.book_id:
+            book = await self._uow.repository.book_repo.get_by_id(command.book_id)
+            if not book:
+                raise NotFoundException(detail="Book not found")
+            reservation.book_id = book.id
+
+        if command.is_instant is not None:
+            reservation.is_instant = command.is_instant
+
+        if command.price is not None:
+            if reservation.customer.wallet_money < command.price:
+                raise InsufficientFundsException(detail="Insufficient funds")
+            reservation.price = command.price
+
+        await self._uow.reservation_repository.update(reservation)
+        await self._uow.commit()
+        return reservation
+
+===== src/reservation/service_layer/__init__.py =====
+
+===== src/reservation/service_layer/query_handlers/get_all_reservations.py =====
+from typing import List, Tuple
+
+from src.reservation.domain.aggregates.reservation import Reservation
+from src.reservation.domain.queries import GetAllReservationsQuery
+from src.reservation.service_layer.async_unit_of_work import ReservationUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+
+
+class GetAllReservationsHandler(BaseUseCase[ReservationUnitOfWork]):
+    def __init__(self, uow: ReservationUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(read_only=True)
+    async def execute(
+        self, query: GetAllReservationsQuery
+    ) -> Tuple[List[Reservation], int]:
+        reservations, count = await self._uow.repository.get_all_by_pagination(
+            query.page, query.per_page
+        )
+        return reservations, count
+
+===== src/reservation/service_layer/query_handlers/get_reservation_by_id.py =====
+from src.reservation.domain.aggregates.reservation import Reservation
+from src.reservation.domain.queries import GetReservationByIdQuery
+from src.reservation.service_layer.async_unit_of_work import ReservationUnitOfWork
+from src.shared_kernel.service_layer.unit_of_work.abstract_base_use_case import (
+    BaseUseCase,
+)
+from src.shared_kernel.service_layer.unit_of_work.transaction import (
+    async_transactional,
+    Propagation,
+)
+from src.shared_kernel.exceptions import NotFoundException
+
+
+class GetReservationByIdHandler(BaseUseCase[ReservationUnitOfWork]):
+    def __init__(self, uow: ReservationUnitOfWork) -> None:
+        self._uow = uow
+
+    @async_transactional(read_only=True)
+    async def execute(self, query: GetReservationByIdQuery) -> Reservation:
+        reservation = await self._uow.repository.get_by_id(query.reservation_id)
+        if not reservation:
+            raise NotFoundException(detail="Reservation not found")
+        return reservation
+
+===== src/reservation/service_layer/query_handlers/__init__.py =====
+
+===== src/shared_kernel/abstract_enum.py =====
+from enum import StrEnum
+
+
+class BaseEnum(StrEnum):
+
+    pass
+
+===== src/shared_kernel/abstract_mapper.py =====
+from abc import ABC, abstractmethod
+from typing import Any, Generic, TypeVar
+
+from src.shared_kernel.domain.abstract_entity import Entity
+
+
+MapperEntity = TypeVar("MapperEntity", bound=Entity)
+MapperModel = TypeVar("MapperModel", bound=Any)
+
+
+class DataMapper(Generic[MapperEntity, MapperModel], ABC):
+    """
+    A generic base class for mapping between domain entities and data models.
+
+    Provides abstract methods to convert data models to domain entities and vice versa.
+    Subclasses must implement the conversion logic in `model_to_entity` and `entity_to_model`.
+
+    Usage:
+        - Implement `model_to_entity` to convert data models to entities.
+        - Implement `entity_to_model` to convert entities to data models.
+    """
+
+    entity_class: type[MapperEntity]
+    model_class: type[MapperModel]
+
+    @staticmethod
+    def model_to_entity(instance: MapperModel) -> MapperEntity:
+        return MapperEntity(**instance.dict)
+
+    @staticmethod
+    def entity_to_model(entity: MapperEntity) -> MapperModel:
+        return MapperModel(**entity.dict)
+
+===== src/shared_kernel/celery_app.py =====
+from celery import Celery
+from src.shared_kernel.config import settings
+
+celery_app = Celery(
+    'worker',
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND
+)
+
+celery_app.conf.task_default_queue = settings.RABBITMQ_QUEUE
+
+
+celery_app.conf.update(
+    task_routes={
+        'src.celery_tasks.send_reminder_task': {'queue': "reminder_queue"},
+    },
+)
+
+from src.celery_tasks import send_reminder_task
+
+
+===== src/shared_kernel/config.py =====
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    postgres_user: str
+    postgres_password: str
+    postgres_db: str
+
+    pgadmin_default_email: str
+    pgadmin_default_password: str
+
+    debug: bool = False
+    app_env: str
+
+    MONGO_URL: str
+    mongo_user: str
+    mongo_password: str
+
+    POSTGRES_URL: str
+    JWT_SECRET: str
+    JWT_ALG: str
+    JWT_EXP: int
+
+    RABBITMQ_USER: str
+    RABBITMQ_PASSWORD: str
+    RABBITMQ_HOST: str
+    RABBITMQ_PORT: int
+    RABBITMQ_VHOST: str
+    RABBITMQ_QUEUE: str
+    CELERY_BROKER_URL: str
+    CELERY_RESULT_BACKEND: str
+
+
+    REDIS_HOST: str
+    REDIS_PORT: int
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+
+EMAIL_REGEX = r"(^[\w\.\+\-]+\@[\w]+\.[a-z]{2,3}$)"
+IRAN_PHONE_NUMBER_REGEX = "^(\+98|0)?9\d{9}$"
+
+===== src/shared_kernel/database/async_postgres_database.py =====
+import re
+from typing import AsyncGenerator
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import sessionmaker, declared_attr, declarative_base
+import asyncio
+
+from src.shared_kernel.config import settings
+
+POSTGRES_URL = settings.POSTGRES_URL
+
+engine = create_async_engine(POSTGRES_URL)
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine, autocommit=False, autoflush=False, class_=AsyncSession
+)
+
+
+def resolve_table_name(name: str) -> str:
+    """Converts CamelCase to snake_case for table names."""
+    return "_".join(re.findall(r"[A-Z][a-z]*", name)).lower()
+
+
+class CustomBase:
+    """Base model with utility methods."""
+
+    __repr_attrs__ = []
+    __repr_max_length__ = 15
+
+    @declared_attr
+    def __tablename__(cls) -> str:
+        return resolve_table_name(cls.__name__)
+
+    @property
+    def dict(self) -> dict:
+        """Returns a dictionary representation of a model."""
+        return {
+            column.name: getattr(self, column.name) for column in self.__table__.columns
+        }
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+DbSession = Depends(get_db)
+
+Base = declarative_base(cls=CustomBase)
+
+===== src/shared_kernel/database/__init__.py =====
+from src.shared_kernel.database.async_postgres_database import Base
+
+from src.auth.adapters.data_models import *
+from src.profiles.adapters.data_models import *
+from src.book.adapters.data_models import *
+from src.reservation.adapters.data_models import *
+
+===== src/shared_kernel/database/migrations/env.py =====
+import asyncio
+from logging.config import fileConfig
+
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
+
+
+from alembic import context
+
+from src.shared_kernel.config import settings
+from src.shared_kernel.database import Base
+
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
+config = context.config
+config.set_main_option("sqlalchemy.url", settings.POSTGRES_URL)
+
+
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# add your model's MetaData object here
+# for 'autogenerate' support
+# from myapp import mymodel
+# target_metadata = mymodel.Base.metadata
+target_metadata = Base.metadata
+
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
+
+
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode.
+
+    This configures the context with just a URL
+    and not an Engine, though an Engine is acceptable
+    here as well.  By skipping the Engine creation
+    we don't even need a DBAPI to be available.
+
+    Calls to context.execute() here emit the given string to the
+    script output.
+
+    """
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    """In this scenario we need to create an Engine
+    and associate a connection with the context.
+
+    """
+
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+
+    await connectable.dispose()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
+
+    asyncio.run(run_async_migrations())
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
+
+===== src/shared_kernel/database/migrations/README =====
+Generic single-database configuration.
+===== src/shared_kernel/database/migrations/script.py.mako =====
+"""${message}
+
+Revision ID: ${up_revision}
+Revises: ${down_revision | comma,n}
+Create Date: ${create_date}
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+${imports if imports else ""}
+
+# revision identifiers, used by Alembic.
+revision: str = ${repr(up_revision)}
+down_revision: Union[str, None] = ${repr(down_revision)}
+branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
+depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
+
+
+def upgrade() -> None:
+    ${upgrades if upgrades else "pass"}
+
+
+def downgrade() -> None:
+    ${downgrades if downgrades else "pass"}
+
+===== src/shared_kernel/database/migrations/versions/2025-02-16_01aa0af8cd74.py =====
+"""create_user_and_customer_table
+
+Revision ID: 01aa0af8cd74
+Revises:
+Create Date: 2025-02-16 12:40:45.400514
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "01aa0af8cd74"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table(
+        "user",
+        sa.Column("username", sa.String(length=255), nullable=False),
+        sa.Column("first_name", sa.String(length=255), nullable=True),
+        sa.Column("last_name", sa.String(length=255), nullable=True),
+        sa.Column("email", sa.String(length=255), nullable=True),
+        sa.Column("phone_number", sa.String(length=11), nullable=True),
+        sa.Column("password", sa.String(), nullable=False),
+        sa.Column(
+            "role",
+            sa.Enum("CUSTOMER", "ADMIN", "AUTHOR", name="userroles"),
+            nullable=False,
+        ),
+        sa.Column("expiration_token_date", sa.DateTime(), nullable=True),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("updated_at", sa.DateTime(), nullable=True),
+        sa.Column("is_deleted", sa.Boolean(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("email"),
+        sa.UniqueConstraint("username"),
+    )
+    op.create_table(
+        "customer",
+        sa.Column("user", sa.Integer(), nullable=False),
+        sa.Column(
+            "subscription_model",
+            sa.Enum("FREE", "PLUS", "PREMIUM", name="subscriptionmodel"),
+            nullable=False,
+        ),
+        sa.Column("subscription_end", sa.DateTime(), nullable=True),
+        sa.Column("wallet_money", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["user"],
+            ["user.id"],
+        ),
+        sa.PrimaryKeyConstraint("user"),
+    )
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table("customer")
+    op.drop_table("user")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/migrations/versions/2025-02-16_73cee2bf442f.py =====
+"""create_phone_number_uniqe
+
+Revision ID: 73cee2bf442f
+Revises: 01aa0af8cd74
+Create Date: 2025-02-16 12:42:15.488265
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "73cee2bf442f"
+down_revision: Union[str, None] = "01aa0af8cd74"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_unique_constraint(None, "user", ["phone_number"])
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_constraint(None, "user", type_="unique")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/migrations/versions/2025-02-17_2237ef35e813.py =====
+"""create rename reserve customer name
+
+Revision ID: 2237ef35e813
+Revises: 5517ffd93224
+Create Date: 2025-02-17 12:23:29.455744
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "2237ef35e813"
+down_revision: Union[str, None] = "5517ffd93224"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.add_column("reserve", sa.Column("customer", sa.Integer(), nullable=False))
+    op.drop_constraint("reserve_customer_id_fkey", "reserve", type_="foreignkey")
+    op.create_foreign_key(None, "reserve", "customer", ["customer"], ["user"])
+    op.drop_column("reserve", "customer_id")
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.add_column(
+        "reserve",
+        sa.Column("customer_id", sa.INTEGER(), autoincrement=False, nullable=False),
+    )
+    op.drop_constraint(None, "reserve", type_="foreignkey")
+    op.create_foreign_key(
+        "reserve_customer_id_fkey", "reserve", "customer", ["customer_id"], ["user"]
+    )
+    op.drop_column("reserve", "customer")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/migrations/versions/2025-02-17_5517ffd93224.py =====
+"""create book and reserve table
+
+Revision ID: 5517ffd93224
+Revises: b902d259b2e4
+Create Date: 2025-02-17 11:22:51.005246
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "5517ffd93224"
+down_revision: Union[str, None] = "b902d259b2e4"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table(
+        "gener",
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_table(
+        "book",
+        sa.Column("title", sa.String(length=255), nullable=False),
+        sa.Column("isbn", sa.String(length=13), nullable=False),
+        sa.Column("price", sa.Integer(), nullable=False),
+        sa.Column("gener", sa.Integer(), nullable=False),
+        sa.Column("description", sa.String(length=2056), nullable=True),
+        sa.Column("unit", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("updated_at", sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["gener"],
+            ["gener.id"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("isbn"),
+    )
+    op.create_table(
+        "book_author",
+        sa.Column("book_id", sa.Integer(), nullable=False),
+        sa.Column("author_id", sa.Integer(), nullable=False),
+        sa.Column("blurb", sa.String(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["author_id"],
+            ["author.user"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["book_id"],
+            ["book.id"],
+        ),
+        sa.PrimaryKeyConstraint("book_id", "author_id"),
+    )
+    op.create_table(
+        "reserve",
+        sa.Column("customer_id", sa.Integer(), nullable=False),
+        sa.Column("book_id", sa.Integer(), nullable=False),
+        sa.Column("start", sa.DateTime(), nullable=False),
+        sa.Column("end", sa.DateTime(), nullable=False),
+        sa.Column("price", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("updated_at", sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["book_id"],
+            ["book.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["customer_id"],
+            ["customer.user"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table("reserve")
+    op.drop_table("book_author")
+    op.drop_table("book")
+    op.drop_table("gener")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/migrations/versions/2025-02-17_b902d259b2e4.py =====
+"""create author table
+
+Revision ID: b902d259b2e4
+Revises: 73cee2bf442f
+Create Date: 2025-02-17 10:40:31.916272
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "b902d259b2e4"
+down_revision: Union[str, None] = "73cee2bf442f"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table(
+        "city",
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_table(
+        "author",
+        sa.Column("user", sa.Integer(), nullable=False),
+        sa.Column("city", sa.Integer(), nullable=True),
+        sa.Column("bank_number", sa.String(length=16), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["city"],
+            ["city.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["user"],
+            ["user.id"],
+        ),
+        sa.PrimaryKeyConstraint("user"),
+    )
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table("author")
+    op.drop_table("city")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/migrations/versions/2025-02-19_aff0cd6f8411.py =====
+"""update resrevation table
+
+Revision ID: aff0cd6f8411
+Revises: 2237ef35e813
+Create Date: 2025-02-19 04:03:48.174640
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+# revision identifiers, used by Alembic.
+revision: str = "aff0cd6f8411"
+down_revision: Union[str, None] = "2237ef35e813"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table(
+        "reservation",
+        sa.Column("customer_id", sa.Integer(), nullable=False),
+        sa.Column("book_id", sa.Integer(), nullable=False),
+        sa.Column("start_time", sa.DateTime(), nullable=False),
+        sa.Column("end_time", sa.DateTime(), nullable=True),
+        sa.Column("is_scheduled", sa.Boolean(), nullable=False),
+        sa.Column("is_instant", sa.Boolean(), nullable=False),
+        sa.Column("price", sa.Integer(), nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("updated_at", sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["book_id"],
+            ["book.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["customer_id"],
+            ["customer.user"],
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.drop_table("reserve")
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table(
+        "reserve",
+        sa.Column("book_id", sa.INTEGER(), autoincrement=False, nullable=False),
+        sa.Column("start", postgresql.TIMESTAMP(), autoincrement=False, nullable=False),
+        sa.Column("end", postgresql.TIMESTAMP(), autoincrement=False, nullable=False),
+        sa.Column("price", sa.INTEGER(), autoincrement=False, nullable=False),
+        sa.Column("id", sa.INTEGER(), autoincrement=True, nullable=False),
+        sa.Column(
+            "created_at", postgresql.TIMESTAMP(), autoincrement=False, nullable=True
+        ),
+        sa.Column(
+            "updated_at", postgresql.TIMESTAMP(), autoincrement=False, nullable=True
+        ),
+        sa.Column("customer", sa.INTEGER(), autoincrement=False, nullable=False),
+        sa.ForeignKeyConstraint(["book_id"], ["book.id"], name="reserve_book_id_fkey"),
+        sa.ForeignKeyConstraint(
+            ["customer"], ["customer.user"], name="reserve_customer_fkey"
+        ),
+        sa.PrimaryKeyConstraint("id", name="reserve_pkey"),
+    )
+    op.drop_table("reservation")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/migrations/versions/2025-02-19_befe1416ce68.py =====
+"""add soft delete to reservation Table
+
+Revision ID: befe1416ce68
+Revises: aff0cd6f8411
+Create Date: 2025-02-19 06:03:02.473441
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision: str = "befe1416ce68"
+down_revision: Union[str, None] = "aff0cd6f8411"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.add_column("reservation", sa.Column("is_deleted", sa.Boolean(), nullable=True))
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_column("reservation", "is_deleted")
+    # ### end Alembic commands ###
+
+===== src/shared_kernel/database/mixin.py =====
+from datetime import datetime
+from sqlalchemy import Column, DateTime, Integer, event, Boolean
+from sqlalchemy.orm import Query
+
+
+from src.shared_kernel.database.async_postgres_database import Base
+
+
+# sqlalchemy models ...
+class PrimaryKeyMixin(object):
+    """Primary key mixin"""
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id._creation_order = 9999
+
+
+class TimeStampMixin(object):
+    """Timestamping mixin"""
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at._creation_order = 9998
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at._creation_order = 9998
+
+    @staticmethod
+    def _updated_at(mapper, connection, target):
+        target.updated_at = datetime.utcnow()
+
+    @classmethod
+    def __declare_last__(cls):
+        event.listen(cls, "before_update", cls._updated_at)
+
+
+class SoftDeleteMixin:
+    is_deleted = Column(Boolean, default=False)
+    is_deleted._creation_order = 9997
+
+===== src/shared_kernel/database/mongodb_engine.py =====
+from pymongo import MongoClient
+from src.shared_kernel.config import settings
+
+def init_mongodb():
+    client = MongoClient(settings.MONGO_URL)
+    db = client['books']
+    return db
+
+def create_text_index():
+    db = init_mongodb()
+    db.books.create_index([("title", "text"), ("description", "text")])
+
+db = init_mongodb()
+
+===== src/shared_kernel/domain/abstract_entity.py =====
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+
+@dataclass
+class Entity:
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, type(self)):
+            return self.id == other.id
+        return False
+
+    def __hash__(self):
+        return hash(self.id)
+
+    @property
+    def dict(self) -> dict:
+        return asdict(self)
+
+===== src/shared_kernel/domain/__init__.py =====
+
+===== src/shared_kernel/entrypoints/mixin.py =====
+class PaginationMixin:
+    page: int
+    per_page: int
+
+===== src/shared_kernel/exceptions.py =====
+from fastapi import HTTPException, status
+from starlette.status import HTTP_401_UNAUTHORIZED
+
+
+class BaseAppException(HTTPException):
+    """Base exception for all application-specific errors."""
+
+    def __init__(
+        self, detail="An error occurred", status_code=status.HTTP_400_BAD_REQUEST
+    ):
+        super().__init__(status_code=status_code, detail=detail)
+
+
+class AuthenticationException(BaseAppException):
+    """Raised when a general authentication error occurs."""
+
+    def __init__(
+        self, detail="Authentication failed", status_code=status.HTTP_401_UNAUTHORIZED
+    ):
+        super().__init__(detail=detail, status_code=status_code)
+
+
+class InvalidCredentialsException(AuthenticationException):
+    """Raised when the provided username or password is incorrect."""
+
+    def __init__(
+        self, detail="Invalid username or password", status_code=HTTP_401_UNAUTHORIZED
+    ):
+        super().__init__(detail=detail, status_code=status_code)
+
+
+class TokenExpired(AuthenticationException):
+    def __init__(
+        self, detail="Token expired", status_code=status.HTTP_401_UNAUTHORIZED
+    ):
+        super().__init__(detail, status_code)
+
+
+class NotFoundException(BaseAppException):
+    def __init__(self, detail="Not found", status_code=status.HTTP_404_NOT_FOUND):
+        super().__init__(detail, status_code)
+
+
+class UserNotFound(NotFoundException):
+    def __init__(self, detail="User Not found", status_code=status.HTTP_404_NOT_FOUND):
+        super().__init__(detail, status_code)
+
+
+class CustomerNotFound(NotFoundException):
+    def __init__(
+        self, detail="Customer Not found", status_code=status.HTTP_404_NOT_FOUND
+    ):
+        super().__init__(detail, status_code)
+
+
+class BookNotFound(NotFoundException):
+    def __init__(self, detail="Book Not found", status_code=status.HTTP_404_NOT_FOUND):
+        super().__init__(detail, status_code)
+
+
+class GenerNotFound(NotFoundException):
+    def __init__(self, detail="Gener Not found", status_code=status.HTTP_404_NOT_FOUND):
+        super().__init__(detail, status_code)
+
+
+class ISBNAlreadyExistsException(BaseAppException):
+    def __init__(
+        self, detail="ISBN already exists", status_code=status.HTTP_400_BAD_REQUEST
+    ):
+        super().__init__(detail, status_code)
+
+
+class InsufficientFundsException(BaseAppException):
+    def __init__(
+        self, detail="Insufficient funds", status_code=status.HTTP_400_BAD_REQUEST
+    ):
+        super().__init__(detail, status_code)
+
+===== src/shared_kernel/__init__.py =====
+
+===== src/shared_kernel/redis_cache.py =====
+import redis
+
+from src.shared_kernel.config import settings
+
+class RedisCache:
+    def __init__(self, host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0):
+        self.client = redis.StrictRedis(host=host, port=port, db=db, decode_responses=True)
+
+    def set(self, key: str, value: str, ttl: int = 300):
+        self.client.setex(key, ttl, value)
+
+    def get(self, key: str) -> str:
+        return self.client.get(key)
+
+    def delete(self, key: str):
+        self.client.delete(key)
+
+    def incr(self, key: str):
+        self.client.incr(key)
+
+    def expire(self, key: str, ttl: int):
+        self.client.expire(key, ttl)
+
+===== src/shared_kernel/repository/async_abstract_repository.py =====
+from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import (
+    TypeVar,
+    Tuple,
+    List,
+    Optional,
+    final,
+    get_args,
+    List,
+    Protocol,
+    Optional,
+    TypeVar,
+)
+from sqlalchemy.inspection import inspect
+from sqlalchemy.sql.selectable import Select
+
+from src.shared_kernel.database.async_postgres_database import CustomBase
+
+
+_MT = TypeVar("_MT", bound=CustomBase)  # Model Type
+_T = TypeVar("_T")  # Primary key Type
+
+
+class BaseAsyncRepository(Protocol):
+    _session: AsyncSession
+
+    @property
+    def session(self) -> AsyncSession:
+        assert self._session is not None
+        return self._session
+
+
+class AsyncRepository(BaseAsyncRepository, Protocol[_MT, _T]):
+    @property
+    def _model(self):
+        return get_args(self.__orig_bases__[0])[0]
+
+    @property
+    def _pk_column(self) -> str:
+        return inspect(self._model).primary_key[0].name
+
+    async def delete(self, item: _MT):
+        await self.session.delete(item)
+
+    async def find_by_pk(self, pk: _T) -> Optional[_MT]:
+        return await self.find_by_col(**{self._pk_column: pk})
+
+    @final
+    async def find_by_col(self, **kwargs) -> Optional[_MT]:
+        item = await self.session.execute(self._gen_stmt_for_param(**kwargs))
+        return item.unique().scalars().one_or_none()
+
+    @final
+    def _gen_stmt_for_param(self, **kwargs) -> Select:
+        stmt = select(self._model)
+        if kwargs:
+            for key, value in kwargs.items():
+                stmt = stmt.where(getattr(self._model, key) == value)
+        return stmt
+
+    @final
+    async def find_all(self, **kwargs) -> List[_MT]:
+        stmt = self._gen_stmt_for_param(**kwargs)
+        result = await self.session.execute(stmt)
+
+        return result.unique().scalars().fetchall()
+
+    @final
+    async def is_exists(self, **kwargs) -> bool:
+        result = await self.session.execute(
+            self._gen_stmt_for_param(**kwargs).exists().select()
+        )
+        return result.scalar()
+
+    @final
+    def create(self, item: _MT):
+        self.session.add(item)
+
+    @final
+    async def create_all(self, items: List[_MT]):
+        self.session.add_all(items)
+
+    def update(self, item: _MT, req: dict):
+        for k, v in req.items():
+            if v is not None:
+                setattr(item, k, v)
+
+    @final
+    async def paginate(
+        self, page: int, per_page: int, **kwargs
+    ) -> Tuple[List[_MT], int]:
+        stmt = self._gen_stmt_for_param(**kwargs)
+
+        offset = max((page - 1) * per_page, 0)
+        paginated_query = stmt.offset(offset).limit(per_page)
+
+        result = await self.session.execute(paginated_query)
+        items = result.unique().scalars().all()
+
+        total_count = await self.session.execute(
+            select(func.count()).select_from(self._model)
+        )
+        total_count = total_count.scalar()
+
+        return items, total_count
+
+===== src/shared_kernel/repository/__init__.py =====
+
+===== src/shared_kernel/repository/mixin.py =====
+from sqlalchemy.sql import Select
+from typing import Tuple
+
+
+class BaseMixin:
+    pass
+
+
+class AsyncPaginationMixin(BaseMixin):
+    async def paginate(
+        self, query: Select, page: int, per_page: int
+    ) -> Tuple[List[T], int]:
+        items_result = await self.db.execute(
+            query.offset((page - 1) * per_page).limit(per_page)
+        )
+        items = items_result.scalars().all()
+
+        total_result = await self.db.execute(
+            select([func.count()]).select_from(query.subquery())
+        )
+        total = total_result.scalar()
+
+        return items, total
+
+===== src/shared_kernel/scheduler.py =====
+import schedule
+import time
+from threading import Thread
+
+class Scheduler:
+    def __init__(self):
+        self.jobs = []
+
+    def every(self, interval):
+        job = schedule.every(interval)
+        self.jobs.append(job)
+        return job
+
+    def run_pending(self):
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
+    def start(self):
+        thread = Thread(target=self.run_pending)
+        thread.daemon = True
+        thread.start()
+
+===== src/shared_kernel/service_layer/__init__.py =====
+
+===== src/shared_kernel/service_layer/unit_of_work/abstract_base_use_case.py =====
+from typing import TypeVar, Protocol
+
+from src.shared_kernel.service_layer.unit_of_work.async_abstract_unit_of_work import (
+    AsyncBaseUnitOfWork,
+)
+
+
+_UT = TypeVar("_UT", bound=AsyncBaseUnitOfWork, covariant=True)
+
+
+class BaseUseCase(Protocol[_UT]):
+    _uow: _UT
+
+    @property
+    def uow(self) -> _UT:
+        assert self._uow is not None
+        return self._uow
+
+===== src/shared_kernel/service_layer/unit_of_work/async_abstract_unit_of_work.py =====
+from abc import ABC, abstractmethod
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from typing import Optional, Type
+
+
+class AsyncBaseUnitOfWork(ABC):
+    @abstractmethod
+    async def __aenter__(self) -> None:
+        raise NotImplementedError("required __aenter__ call for UoW Pattern")
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[Exception]],
+        exc_val: Optional[Exception],
+        traceback,
+    ):
+        if exc_type:
+            await self.rollback()
+
+    @abstractmethod
+    async def commit(self):
+        raise NotImplementedError("Choice ORM commit func")
+
+    @abstractmethod
+    async def rollback(self):
+        raise NotImplementedError("Choice ORM rollback func")
+
+
+class AsyncSQLAlchemyUnitOfWork(AsyncBaseUnitOfWork):
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
+        self._session: Optional[AsyncSession] = None
+
+    @property
+    def engine(self) -> AsyncEngine:
+        assert self._engine is not None
+        return self._engine
+
+    @property
+    def session(self) -> AsyncSession:
+        assert self._session is not None
+        return self._session
+
+    async def __aenter__(self):
+        self._session = AsyncSession(self.engine)
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[Exception]],
+        exc_val: Optional[Exception],
+        traceback,
+    ):
+        await super().__aexit__(exc_type, exc_val, traceback)
+        await self.session.close()
+
+    async def commit(self):
+        await self.session.commit()
+
+    async def flush(self):
+        await self.session.flush()
+
+    async def refresh(self, item):
+        await self.session.refresh(item)
+
+    async def rollback(self):
+        await self.session.rollback()
+
+===== src/shared_kernel/service_layer/unit_of_work/__init__.py =====
+
+===== src/shared_kernel/service_layer/unit_of_work/transaction.py =====
+from sqlalchemy import inspect
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import NoInspectionAvailable
+from enum import Enum
+
+
+class Propagation(Enum):
+    REQUIRED = "required"
+    REQUIRES_NEW = "requires_new"
+
+
+async def __async_propagation_required(
+    self, func, read_only: bool, session: AsyncSession, args, kwargs
+):
+    if not session.is_active:
+        session.begin(subtransactions=True)
+
+    result = await func(self, *args, **kwargs)
+    if not read_only:
+        await session.commit()
+        try:
+            inspect(result)
+            await session.refresh(result)
+        except NoInspectionAvailable:
+            pass
+
+    return result
+
+
+async def __async_requires_new(
+    self, func, read_only: bool, session: AsyncSession, args, kwargs
+):
+    if not session.is_active:
+        session.begin()
+
+    result = await func(self, *args, **kwargs)
+    if not read_only:
+        await session.commit()
+        try:
+            inspect(result)
+            await session.refresh(result)
+        except NoInspectionAvailable:
+            pass
+
+    return result
+
+
+def async_transactional(
+    read_only: bool = False, propagation: Propagation = Propagation.REQUIRES_NEW
+):
+    def decorator(func):
+        async def wrapper(self, *args, **kwargs):
+            if hasattr(self, "uow"):
+                async with self.uow:
+                    if propagation == Propagation.REQUIRED:
+                        result = await __async_propagation_required(
+                            self=self,
+                            func=func,
+                            read_only=read_only,
+                            session=self.uow.session,
+                            args=args,
+                            kwargs=kwargs,
+                        )
+                    else:
+                        result = await __async_requires_new(
+                            self=self,
+                            func=func,
+                            read_only=read_only,
+                            session=self.uow.session,
+                            args=args,
+                            kwargs=kwargs,
+                        )
+
+                    return result
+
+            elif hasattr(self, "session"):
+                if propagation == Propagation.REQUIRED:
+                    result = await __async_propagation_required(
+                        self=self,
+                        func=func,
+                        read_only=read_only,
+                        session=self.session,
+                        args=args,
+                        kwargs=kwargs,
+                    )
+                else:
+                    result = await __async_requires_new(
+                        self=self,
+                        func=func,
+                        read_only=read_only,
+                        session=self.session,
+                        args=args,
+                        kwargs=kwargs,
+                    )
+
+                return result
+
+        return wrapper
+
+    return decorator
+
+===== src/tasks/example_task.py =====
+from src.shared_kernel.celery_app import celery_app
+
+@celery_app.task
+def add(x, y):
+    import logging
+    logging.debug(f"Adding {x} + {y}")
+    print(f"Adding {x} + {y}")
+    return x + y
+
+===== src/tasks/__init__.py =====
+
+===== wait-for-it.sh =====
+#!/usr/bin/env bash
+# Use this script to test if a given TCP host/port are available
+
+WAITFORIT_cmdname=${0##*/}
+
+echoerr() { if [[ $WAITFORIT_QUIET -ne 1 ]]; then echo "$@" 1>&2; fi }
+
+usage()
+{
+    cat << USAGE >&2
+Usage:
+    $WAITFORIT_cmdname host:port [-s] [-t timeout] [-- command args]
+    -h HOST | --host=HOST       Host or IP under test
+    -p PORT | --port=PORT       TCP port under test
+                                Alternatively, you specify the host and port as host:port
+    -s | --strict               Only execute subcommand if the test succeeds
+    -q | --quiet                Don't output any status messages
+    -t TIMEOUT | --timeout=TIMEOUT
+                                Timeout in seconds, zero for no timeout
+    -- COMMAND ARGS             Execute command with args after the test finishes
+USAGE
+    exit 1
+}
+
+wait_for()
+{
+    if [[ $WAITFORIT_TIMEOUT -gt 0 ]]; then
+        echoerr "$WAITFORIT_cmdname: waiting $WAITFORIT_TIMEOUT seconds for $WAITFORIT_HOST:$WAITFORIT_PORT"
+    else
+        echoerr "$WAITFORIT_cmdname: waiting for $WAITFORIT_HOST:$WAITFORIT_PORT without a timeout"
+    fi
+    WAITFORIT_start_ts=$(date +%s)
+    while :
+    do
+        if [[ $WAITFORIT_ISBUSY -eq 1 ]]; then
+            nc -z $WAITFORIT_HOST $WAITFORIT_PORT
+            WAITFORIT_result=$?
+        else
+            (echo -n > /dev/tcp/$WAITFORIT_HOST/$WAITFORIT_PORT) >/dev/null 2>&1
+            WAITFORIT_result=$?
+        fi
+        if [[ $WAITFORIT_result -eq 0 ]]; then
+            WAITFORIT_end_ts=$(date +%s)
+            echoerr "$WAITFORIT_cmdname: $WAITFORIT_HOST:$WAITFORIT_PORT is available after $((WAITFORIT_end_ts - WAITFORIT_start_ts)) seconds"
+            break
+        fi
+        sleep 1
+    done
+    return $WAITFORIT_result
+}
+
+wait_for_wrapper()
+{
+    # In order to support SIGINT during timeout: http://unix.stackexchange.com/a/57692
+    if [[ $WAITFORIT_QUIET -eq 1 ]]; then
+        timeout $WAITFORIT_BUSYTIMEFLAG $WAITFORIT_TIMEOUT $0 --quiet --child --host=$WAITFORIT_HOST --port=$WAITFORIT_PORT --timeout=$WAITFORIT_TIMEOUT &
+    else
+        timeout $WAITFORIT_BUSYTIMEFLAG $WAITFORIT_TIMEOUT $0 --child --host=$WAITFORIT_HOST --port=$WAITFORIT_PORT --timeout=$WAITFORIT_TIMEOUT &
+    fi
+    WAITFORIT_PID=$!
+    trap "kill -INT -$WAITFORIT_PID" INT
+    wait $WAITFORIT_PID
+    WAITFORIT_RESULT=$?
+    if [[ $WAITFORIT_RESULT -ne 0 ]]; then
+        echoerr "$WAITFORIT_cmdname: timeout occurred after waiting $WAITFORIT_TIMEOUT seconds for $WAITFORIT_HOST:$WAITFORIT_PORT"
+    fi
+    return $WAITFORIT_RESULT
+}
+
+# process arguments
+while [[ $# -gt 0 ]]
+do
+    case "$1" in
+        *:* )
+        WAITFORIT_hostport=(${1//:/ })
+        WAITFORIT_HOST=${WAITFORIT_hostport[0]}
+        WAITFORIT_PORT=${WAITFORIT_hostport[1]}
+        shift 1
+        ;;
+        --child)
+        WAITFORIT_CHILD=1
+        shift 1
+        ;;
+        -q | --quiet)
+        WAITFORIT_QUIET=1
+        shift 1
+        ;;
+        -s | --strict)
+        WAITFORIT_STRICT=1
+        shift 1
+        ;;
+        -h)
+        WAITFORIT_HOST="$2"
+        if [[ $WAITFORIT_HOST == "" ]]; then break; fi
+        shift 2
+        ;;
+        --host=*)
+        WAITFORIT_HOST="${1#*=}"
+        shift 1
+        ;;
+        -p)
+        WAITFORIT_PORT="$2"
+        if [[ $WAITFORIT_PORT == "" ]]; then break; fi
+        shift 2
+        ;;
+        --port=*)
+        WAITFORIT_PORT="${1#*=}"
+        shift 1
+        ;;
+        -t)
+        WAITFORIT_TIMEOUT="$2"
+        if [[ $WAITFORIT_TIMEOUT == "" ]]; then break; fi
+        shift 2
+        ;;
+        --timeout=*)
+        WAITFORIT_TIMEOUT="${1#*=}"
+        shift 1
+        ;;
+        --)
+        shift
+        WAITFORIT_CLI=("$@")
+        break
+        ;;
+        --help)
+        usage
+        ;;
+        *)
+        echoerr "Unknown argument: $1"
+        usage
+        ;;
+    esac
+done
+
+if [[ "$WAITFORIT_HOST" == "" || "$WAITFORIT_PORT" == "" ]]; then
+    echoerr "Error: you need to provide a host and port to test."
+    usage
+fi
+
+WAITFORIT_TIMEOUT=${WAITFORIT_TIMEOUT:-15}
+WAITFORIT_STRICT=${WAITFORIT_STRICT:-0}
+WAITFORIT_CHILD=${WAITFORIT_CHILD:-0}
+WAITFORIT_QUIET=${WAITFORIT_QUIET:-0}
+
+# Check to see if timeout is from busybox?
+WAITFORIT_TIMEOUT_PATH=$(type -p timeout)
+WAITFORIT_TIMEOUT_PATH=$(realpath $WAITFORIT_TIMEOUT_PATH 2>/dev/null || readlink -f $WAITFORIT_TIMEOUT_PATH)
+
+WAITFORIT_BUSYTIMEFLAG=""
+if [[ $WAITFORIT_TIMEOUT_PATH =~ "busybox" ]]; then
+    WAITFORIT_ISBUSY=1
+    # Check if busybox timeout uses -t flag
+    # (recent Alpine versions don't support -t anymore)
+    if timeout &>/dev/stdout | grep -q -e '-t '; then
+        WAITFORIT_BUSYTIMEFLAG="-t"
+    fi
+else
+    WAITFORIT_ISBUSY=0
+fi
+
+if [[ $WAITFORIT_CHILD -gt 0 ]]; then
+    wait_for
+    WAITFORIT_RESULT=$?
+    exit $WAITFORIT_RESULT
+else
+    if [[ $WAITFORIT_TIMEOUT -gt 0 ]]; then
+        wait_for_wrapper
+        WAITFORIT_RESULT=$?
+    else
+        wait_for
+        WAITFORIT_RESULT=$?
+    fi
+fi
+
+if [[ $WAITFORIT_CLI != "" ]]; then
+    if [[ $WAITFORIT_RESULT -ne 0 && $WAITFORIT_STRICT -eq 1 ]]; then
+        echoerr "$WAITFORIT_cmdname: strict mode, refusing to execute subprocess"
+        exit $WAITFORIT_RESULT
+    fi
+    exec "${WAITFORIT_CLI[@]}"
+else
+    exit $WAITFORIT_RESULT
+fi
+
